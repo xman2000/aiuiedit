@@ -204,6 +204,22 @@ async function detectLaravelEntryFromRoutes(sourceRoot: string): Promise<string 
     if (homeFallback) return homeFallback
   }
 
+  const inertiaRootMatch = routesContent.match(/Inertia::render\(\s*['"]([A-Za-z0-9_\-\/]+)['"]\s*[,\)]/)
+  if (inertiaRootMatch?.[1]) {
+    const pageName = inertiaRootMatch[1]
+    const inertiaCandidates = [
+      join(sourceRoot, 'resources', 'js', 'Pages', `${pageName}.vue`),
+      join(sourceRoot, 'resources', 'js', 'Pages', `${pageName}.tsx`),
+      join(sourceRoot, 'resources', 'js', 'Pages', `${pageName}.jsx`),
+      join(sourceRoot, 'resources', 'js', 'Pages', `${pageName}.ts`),
+      join(sourceRoot, 'resources', 'js', 'Pages', `${pageName}.js`)
+    ]
+
+    for (const candidate of inertiaCandidates) {
+      if (await pathExists(candidate)) return candidate
+    }
+  }
+
   return null
 }
 
@@ -311,7 +327,11 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
     join(sourceRoot, 'resources', 'views', 'welcome.blade.php'),
     join(sourceRoot, 'resources', 'views', 'home.blade.php'),
     join(sourceRoot, 'resources', 'views', 'layouts', 'app.blade.php'),
-    join(sourceRoot, 'resources', 'views', 'app.blade.php')
+    join(sourceRoot, 'resources', 'views', 'app.blade.php'),
+    join(sourceRoot, 'resources', 'js', 'app.tsx'),
+    join(sourceRoot, 'resources', 'js', 'app.jsx'),
+    join(sourceRoot, 'resources', 'js', 'app.ts'),
+    join(sourceRoot, 'resources', 'js', 'app.js')
   ])
 
   if (laravelSignals || laravelEntry) {
@@ -329,7 +349,16 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
       'resources/views/home.blade.php',
       'resources/views/layouts/app.blade.php',
       'resources/views/app.blade.php',
-      '.blade.php'
+      '.blade.php',
+      'resources/js/app.tsx',
+      'resources/js/app.jsx',
+      'resources/js/app.ts',
+      'resources/js/app.js',
+      'resources/js/Pages/.vue',
+      'resources/js/Pages/.tsx',
+      'resources/js/Pages/.jsx',
+      'resources/js/Pages/.ts',
+      'resources/js/Pages/.js'
     ])
 
     return { framework: 'laravel', entryFile: discoveredLaravelEntry }
