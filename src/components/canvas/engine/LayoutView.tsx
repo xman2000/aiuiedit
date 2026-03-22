@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Eye, EyeOff, Lock, Unlock, MoveLeft, MoveRight, MoveUp, MoveDown, ChevronUp, ChevronDown, Trash2 } from 'lucide-react'
+import { Eye, EyeOff, Lock, Unlock, MoveLeft, MoveRight, MoveUp, MoveDown, ChevronUp, ChevronDown, Trash2, Type, Heading1, Image as ImageIcon, Link2, RectangleHorizontal, MousePointer } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { useProjectStore } from '@/store/useProjectStore'
@@ -31,6 +31,26 @@ function sortedChildren(map: Map<string, CanvasNode>, pageId: string, parentId: 
   return Array.from(map.values())
     .filter((node) => node.pageId === pageId && ((node.parentId || null) === parentId))
     .sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x))
+}
+
+function readNodeText(node: CanvasNode): string {
+  const props = (node.props || {}) as Record<string, any>
+  return String(
+    props.text || props.content || props.label || props.title || props.alt || ''
+  ).trim()
+}
+
+function summarizeText(value: string, max = 34): string {
+  if (!value) return ''
+  if (value.length <= max) return value
+  return `${value.slice(0, max - 1)}...`
+}
+
+function getNodeTitle(node: CanvasNode): string {
+  const text = readNodeText(node)
+  if (text) return summarizeText(text, 40)
+  if (node.name) return node.name
+  return node.type
 }
 
 export function LayoutView({ currentPage }: LayoutViewProps) {
@@ -586,12 +606,24 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
               const isSelected = selectedIds.has(node.id)
               const width = readDimension(node.size.width, 140)
               const height = readDimension(node.size.height, 48)
+              const title = getNodeTitle(node)
+              const props = (node.props || {}) as Record<string, any>
+              const src = String(props.src || '').trim()
+              const href = String(props.href || '').trim()
+
+              let Icon = RectangleHorizontal
+              if (node.type === 'heading') Icon = Heading1
+              if (node.type === 'text') Icon = Type
+              if (node.type === 'image') Icon = ImageIcon
+              if (node.type === 'link') Icon = Link2
+              if (node.type === 'button') Icon = MousePointer
+
               return (
                 <div
                   key={node.id}
                   className={isSelected
-                    ? 'absolute cursor-move rounded border-2 border-primary bg-primary/10 px-2 py-1 shadow-sm'
-                    : 'absolute cursor-move rounded border border-border bg-card px-2 py-1 shadow-sm hover:border-primary/60'}
+                    ? 'absolute cursor-move rounded border-2 border-primary bg-primary/10 p-2 shadow-sm'
+                    : 'absolute cursor-move rounded border border-border bg-card p-2 shadow-sm hover:border-primary/60'}
                   style={{
                     left: `${node.position.x}px`,
                     top: `${node.position.y}px`,
@@ -615,8 +647,28 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                     selectNode(node.id, event.metaKey || event.ctrlKey)
                   }}
                 >
-                  <div className="truncate text-xs font-medium text-foreground">{node.name || node.type}</div>
-                  <div className="truncate font-mono text-[10px] text-muted-foreground">{node.type}</div>
+                  <div className="mb-1 flex items-center gap-1.5">
+                    <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                    <div className="truncate text-xs font-medium text-foreground">{title}</div>
+                  </div>
+                  {node.type === 'image' ? (
+                    src ? (
+                      <img
+                        src={src}
+                        alt={String(props.alt || title)}
+                        className="h-16 w-full rounded border object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-16 items-center justify-center rounded border bg-muted/30 text-[10px] text-muted-foreground">Image</div>
+                    )
+                  ) : node.type === 'button' ? (
+                    <div className="inline-flex rounded bg-primary px-2 py-1 text-[10px] font-medium text-primary-foreground">{summarizeText(title, 22) || 'Button'}</div>
+                  ) : node.type === 'link' ? (
+                    <div className="truncate text-[10px] text-blue-600 underline">{summarizeText(title, 26) || summarizeText(href, 26) || 'Link'}</div>
+                  ) : (
+                    <div className="line-clamp-2 text-[10px] text-muted-foreground">{summarizeText(title, 56) || node.type}</div>
+                  )}
+                  <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{node.type}</div>
                 </div>
               )
             })}
@@ -630,7 +682,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
           <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto pr-1">
             <div className="col-span-2 rounded-md border bg-card p-3">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selected Element</p>
-              <p className="mt-1 text-sm font-medium text-foreground">{selectedNode.name || selectedNode.type}</p>
+              <p className="mt-1 text-sm font-medium text-foreground">{getNodeTitle(selectedNode)}</p>
               <p className="font-mono text-[11px] text-muted-foreground">{selectedNode.id}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 <Button size="sm" variant="outline" onClick={() => moveSelectedAmongSiblings(-1)}>

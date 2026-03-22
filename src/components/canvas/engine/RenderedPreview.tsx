@@ -588,6 +588,19 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
     if (!quickFilterLower) return TAILWIND_CLASS_GROUPS
     return TAILWIND_CLASS_GROUPS.filter((group) => group.label.toLowerCase().includes(quickFilterLower))
   }, [quickFilterLower])
+  const activeTailwindGroups = useMemo(() => {
+    const active = new Set<string>()
+    snapshotClassTokens.forEach((token) => {
+      const baseToken = splitVariantToken(token).base
+      for (const group of TAILWIND_CLASS_GROUPS) {
+        if (group.matcher.test(baseToken)) {
+          active.add(group.key)
+          break
+        }
+      }
+    })
+    return active
+  }, [snapshotClassTokens])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -1125,11 +1138,18 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
 
                           {filteredTailwindGroups.map((group) => {
                             const useVariant = RESPONSIVE_GROUP_KEYS.has(group.key) ? quickVariant : ''
+                            const activeCount = snapshotClassTokens.filter((token) => group.matcher.test(splitVariantToken(token).base)).length
                             return (
-                              <details key={group.key} className="rounded-md border bg-background" open={group.key === 'layout' || group.key === 'textColor'}>
-                                <summary className="cursor-pointer px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
-                                  {group.label}
-                                  {RESPONSIVE_GROUP_KEYS.has(group.key) ? ` (${useVariant || 'base'})` : ''}
+                              <details key={group.key} className="rounded-md border bg-background" open={activeTailwindGroups.has(group.key)}>
+                                <summary className="flex cursor-pointer items-center justify-between px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+                                  <span>
+                                    {group.label}{RESPONSIVE_GROUP_KEYS.has(group.key) ? ` (${useVariant || 'base'})` : ''}
+                                  </span>
+                                  {activeCount > 0 && (
+                                    <span className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                                      {activeCount}
+                                    </span>
+                                  )}
                                 </summary>
                                 <div className="grid grid-cols-2 gap-1 border-t p-2">
                                   {group.options.map((option) => {
