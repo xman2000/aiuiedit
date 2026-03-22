@@ -154,21 +154,39 @@ export function Canvas() {
             }}
           />
 
-          {/* Render Nodes */}
-          {Array.from(nodes.values()).map(node => (
-            <CanvasNodeComponent
-              key={node.id}
-              node={node}
-              isSelected={selectedIds.has(node.id)}
-              onSelect={handleNodeSelect(node.id)}
-              scale={zoom}
-            />
-          ))}
+          {/* Page Frame - Visual Boundary */}
+          <div 
+            className="absolute border-2 border-dashed border-muted-foreground/30 bg-background shadow-lg"
+            style={{
+              left: '100px',
+              top: '100px',
+              width: '1200px',
+              height: '800px',
+            }}
+          >
+            {/* Page Label */}
+            <div className="absolute -top-6 left-0 text-xs text-muted-foreground font-medium">
+              Page: {currentProject?.pages[0]?.name || 'Home'} (1200×800)
+            </div>
+            
+            {/* Render Nodes - Inside Page Frame */}
+            <div className="relative w-full h-full overflow-hidden">
+              {Array.from(nodes.values()).map(node => (
+                <CanvasNodeComponent
+                  key={node.id}
+                  node={node}
+                  isSelected={selectedIds.has(node.id)}
+                  onSelect={handleNodeSelect(node.id)}
+                  scale={zoom}
+                />
+              ))}
 
-          {/* Empty State */}
-          {nodes.size === 0 && (
-            <EmptyCanvas onAddNode={handleAddNode} />
-          )}
+              {/* Empty State - Inside Page Frame */}
+              {nodes.size === 0 && (
+                <EmptyCanvas onAddNode={handleAddNode} />
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

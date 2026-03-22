@@ -6,6 +6,7 @@ import { Folder, Settings, ArrowRight, Check } from 'lucide-react'
 export function WelcomeWizard() {
   const [step, setStep] = useState(1)
   const [workspacePath, setWorkspacePath] = useState('')
+  const [projectName, setProjectName] = useState('My First Project')
   const [isLoading, setIsLoading] = useState(false)
   const [electronReady, setElectronReady] = useState(false)
   const { setSettings, setWelcomeOpen } = useAppStore()
@@ -49,15 +50,16 @@ export function WelcomeWizard() {
   }
 
   const handleComplete = async () => {
-    if (!workspacePath) return
-    
+    if (!workspacePath || !projectName.trim()) return
+
     if (!window.electron) {
       alert('Electron API not available. Please restart the application.')
       return
     }
-    
+
     setIsLoading(true)
     try {
+      // Save settings
       await window.electron.saveSettings({
         workspacePath,
         theme: 'system',
@@ -65,12 +67,15 @@ export function WelcomeWizard() {
         recentProjects: [],
         shortcuts: {}
       })
-      
+
+      // Create the project
+      const project = await window.electron.createProject(projectName)
+
       setSettings({ workspacePath })
       setWelcomeOpen(false)
     } catch (error) {
-      console.error('Failed to save settings:', error)
-      alert('Error saving settings: ' + error)
+      console.error('Failed to complete setup:', error)
+      alert('Error: ' + error)
     } finally {
       setIsLoading(false)
     }
@@ -95,6 +100,7 @@ export function WelcomeWizard() {
           <div className={`h-2 w-16 rounded-full ${step >= 1 ? 'bg-primary' : 'bg-muted'}`} />
           <div className={`h-2 w-16 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
           <div className={`h-2 w-16 rounded-full ${step >= 3 ? 'bg-primary' : 'bg-muted'}`} />
+          <div className={`h-2 w-16 rounded-full ${step >= 4 ? 'bg-primary' : 'bg-muted'}`} />
         </div>
 
         {/* Electron API Warning */}
@@ -212,8 +218,57 @@ export function WelcomeWizard() {
           </div>
         )}
 
-        {/* Step 3: Complete */}
+        {/* Step 3: Project Name */}
         {step === 3 && (
+          <div className="space-y-6">
+            <div className="text-center">
+              <h2 className="mb-2 text-xl font-semibold">Name Your First Project</h2>
+              <p className="text-sm text-muted-foreground">
+                Give your project a meaningful name
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Project Name</label>
+                <input
+                  type="text"
+                  value={projectName}
+                  onChange={(e) => setProjectName(e.target.value)}
+                  placeholder="My Awesome Project"
+                  className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                  autoFocus
+                />
+              </div>
+
+              <div className="rounded-lg bg-muted p-3">
+                <p className="text-sm text-muted-foreground">
+                  Project will be saved to:
+                </p>
+                <code className="mt-1 block text-xs break-all">
+                  {workspacePath}/projects/{projectName.replace(/\s+/g, '-').toLowerCase()}.canvas
+                </code>
+              </div>
+            </div>
+
+            <div className="flex gap-4">
+              <Button variant="outline" onClick={() => setStep(2)} className="flex-1">
+                Back
+              </Button>
+              <Button 
+                onClick={() => setStep(4)} 
+                disabled={!projectName.trim()}
+                className="flex-1"
+              >
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 4: Complete */}
+        {step === 4 && (
           <div className="space-y-6">
             <div className="text-center">
               <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 text-green-500">
@@ -221,19 +276,20 @@ export function WelcomeWizard() {
               </div>
               <h2 className="mb-2 text-xl font-semibold">Ready to Go!</h2>
               <p className="text-sm text-muted-foreground">
-                Your workspace is set up at:
+                Creating project:
                 <br />
-                <code className="mt-2 inline-block rounded bg-muted px-2 py-1 text-xs">
-                  {workspacePath}
-                </code>
+                <strong className="text-foreground">{projectName}</strong>
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                Workspace: <code className="bg-muted px-1 rounded">{workspacePath}</code>
               </p>
             </div>
 
             <div className="rounded-lg bg-muted p-4 text-sm">
               <p className="font-medium mb-2">What's next?</p>
               <ul className="space-y-1 text-muted-foreground">
-                <li>• Create your first project</li>
-                <li>• Explore the component library</li>
+                <li>• Start designing your page</li>
+                <li>• Drag components from the library</li>
                 <li>• Try AI commands like "add a button"</li>
               </ul>
             </div>
@@ -243,7 +299,7 @@ export function WelcomeWizard() {
               disabled={isLoading}
               className="w-full"
             >
-              {isLoading ? 'Setting up...' : 'Launch aiuiedit'}
+              {isLoading ? 'Creating Project...' : `Create "${projectName}"`}
               {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
             </Button>
           </div>

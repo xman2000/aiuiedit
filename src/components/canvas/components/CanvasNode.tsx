@@ -174,7 +174,136 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
             readOnly
           />
         )
-      
+
+      case 'card':
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%'
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: '8px' }}>{node.props.title}</div>
+            <div style={{ color: '#6B7280' }}>Card content</div>
+          </div>
+        )
+
+      case 'textarea':
+        return (
+          <textarea
+            placeholder={node.props.placeholder || 'Enter long text...'}
+            rows={node.props.rows || 4}
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              resize: 'none'
+            }}
+            readOnly
+          />
+        )
+
+      case 'checkbox':
+        return (
+          <label style={{ ...node.style, pointerEvents: 'none', width: '100%', height: '100%' }}>
+            <input type="checkbox" checked={node.props.checked} readOnly style={{ marginRight: '8px' }} />
+            {node.props.label}
+          </label>
+        )
+
+      case 'select':
+        return (
+          <select
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%'
+            }}
+            disabled
+          >
+            <option>{node.props.placeholder || 'Select...'}</option>
+          </select>
+        )
+
+      case 'link':
+        return (
+          <a
+            href={node.props.href || '#'}
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'inline-block'
+            }}
+          >
+            {node.props.text || 'Link'}
+          </a>
+        )
+
+      case 'badge':
+        return (
+          <span
+            style={{
+              ...node.style,
+              pointerEvents: 'none'
+            }}
+          >
+            {node.props.text || 'Badge'}
+          </span>
+        )
+
+      case 'divider':
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%'
+            }}
+          />
+        )
+
+      case 'avatar':
+        return node.props.src ? (
+          <img
+            src={node.props.src}
+            alt="Avatar"
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              objectFit: 'cover'
+            }}
+          />
+        ) : (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none'
+            }}
+          >
+            {node.props.initials || '??'}
+          </div>
+        )
+
+      case 'label':
+        return (
+          <label
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%'
+            }}
+          >
+            {node.props.text || 'Label'}
+          </label>
+        )
+
       default:
         return <div style={{ width: '100%', height: '100%', background: '#ccc' }} />
     }
