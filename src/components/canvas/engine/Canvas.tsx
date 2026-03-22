@@ -19,7 +19,7 @@ export function Canvas() {
     selectNode,
     addNode
   } = useCanvasStore()
-  const { currentProject, setDirty } = useProjectStore()
+  const { currentProject, currentPage, setDirty } = useProjectStore()
   
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
@@ -81,7 +81,9 @@ export function Canvas() {
   const handleAddNode = useCallback((type: string) => {
     if (!currentProject) return
 
-    const newNode = createCanvasNode(type)
+    if (!currentPage) return
+
+    const newNode = createCanvasNode(type, currentPage.id)
     if (!newNode) return
 
     addNode(newNode)
@@ -89,7 +91,7 @@ export function Canvas() {
     
     // Select the new node
     useCanvasStore.getState().selectNode(newNode.id)
-  }, [currentProject, addNode, setDirty])
+  }, [currentProject, currentPage, addNode, setDirty])
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -154,7 +156,7 @@ export function Canvas() {
             {/* Render Nodes - Inside Page Frame */}
             <div className="relative w-full h-full overflow-hidden">
               {Array.from(nodes.values()).map(node => (
-                node.visible ? (
+                node.visible && currentPage && (node.pageId || currentPage.id) === currentPage.id ? (
                 <CanvasNodeComponent
                   key={node.id}
                   node={node}

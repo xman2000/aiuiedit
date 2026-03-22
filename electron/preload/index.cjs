@@ -21,8 +21,15 @@ const electronAPI = {
   // Projects
   listProjects: () => ipcRenderer.invoke('projects:list'),
   createProject: (name) => ipcRenderer.invoke('projects:create', name),
+  importProjectFromSource: (sourceRoot) => ipcRenderer.invoke('projects:import-source', sourceRoot),
+  refreshProjectFromSource: (projectPath) => ipcRenderer.invoke('projects:refresh-from-source', projectPath),
   loadProject: (path) => ipcRenderer.invoke('projects:load', path),
-  saveProject: (path, data) => ipcRenderer.invoke('projects:save', path, data)
+  saveProject: (path, data) => ipcRenderer.invoke('projects:save', path, data),
+
+  // Source sync
+  applySourceTextEdit: (payload) => ipcRenderer.invoke('source:apply-text-edit', payload),
+  applySourcePageMetadataEdit: (payload) => ipcRenderer.invoke('source:apply-page-metadata-edit', payload),
+  syncSourcePage: (payload) => ipcRenderer.invoke('source:sync-page', payload)
 }
 
 // Expose API to window

@@ -30,7 +30,7 @@ export function ChatPanel() {
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { selectedIds, nodes, addNode, updateNode, deleteNode, pushHistory } = useCanvasStore()
-  const { currentProject, setDirty } = useProjectStore()
+  const { currentProject, currentPage, setDirty } = useProjectStore()
   const { settings } = useAppStore()
   
   // Create AI service with current settings
@@ -101,7 +101,9 @@ export function ChatPanel() {
                   actions.push({
                     label: `Add ${component.name}`,
                     action: () => {
-                      const newNode = createCanvasNode(component.type, { x: 200, y: 200 })
+                      if (!currentPage) return
+
+                      const newNode = createCanvasNode(component.type, currentPage.id, { x: 200, y: 200 })
                       if (!newNode) return
 
                       addNode(newNode)

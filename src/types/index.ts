@@ -6,12 +6,24 @@ export interface Project {
   updatedAt: string
   pages: Page[]
   designSystem: DesignSystem
+  source?: {
+    root: string
+    framework: 'nextjs' | 'react-vite' | 'unknown'
+    entryFile: string
+    roundTrip: boolean
+    pages?: Record<string, { file: string; route: string }>
+  }
 }
 
 export interface Page {
   id: string
   name: string
   route: string
+  title?: string
+  description?: string
+  template?: 'default' | 'landing' | 'docs' | 'dashboard'
+  noIndex?: boolean
+  authRequired?: boolean
 }
 
 export interface DesignSystem {
@@ -38,6 +50,7 @@ export interface ColorToken {
 export interface CanvasNode {
   id: string
   type: string
+  pageId: string
   parentId: string | null
   position: { x: number; y: number }
   size: { width: number | string; height: number | string }

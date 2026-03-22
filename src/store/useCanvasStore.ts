@@ -14,6 +14,7 @@ interface CanvasStore extends CanvasState {
   deselectNode: (id: string) => void
   deselectAll: () => void
   selectAll: () => void
+  selectAllInPage: (pageId: string) => void
   
   // Viewport
   setZoom: (zoom: number) => void
@@ -161,6 +162,16 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
   selectAll: () => {
     set((state) => ({
       selectedIds: new Set(state.nodes.keys())
+    }))
+  },
+
+  selectAllInPage: (pageId) => {
+    set((state) => ({
+      selectedIds: new Set(
+        Array.from(state.nodes.values())
+          .filter((node) => node.visible && node.pageId === pageId)
+          .map((node) => node.id)
+      )
     }))
   },
 
@@ -381,6 +392,7 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => ({
       const groupNode: CanvasNode = {
         id: groupId,
         type: 'group',
+        pageId: selectedNodes[0].pageId,
         parentId: null,
         position: { x: left, y: top },
         size: {

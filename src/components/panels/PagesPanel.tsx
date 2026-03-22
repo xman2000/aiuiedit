@@ -5,7 +5,7 @@ import { Plus, FileText, Trash2, ChevronRight } from 'lucide-react'
 import type { Page } from '@/types'
 
 export function PagesPanel() {
-  const { currentProject, currentPage, setCurrentPage, addPage, removePage } = useProjectStore()
+  const { currentProject, currentPage, projectPath, setCurrentPage, addPage, removePage, updatePage } = useProjectStore()
   const [isAdding, setIsAdding] = useState(false)
   const [newPageName, setNewPageName] = useState('')
 
@@ -23,10 +23,16 @@ export function PagesPanel() {
     const newPage: Page = {
       id: `page-${Date.now()}`,
       name: newPageName,
-      route: `/${newPageName.toLowerCase().replace(/\s+/g, '-')}`
+      route: `/${newPageName.toLowerCase().replace(/\s+/g, '-')}`,
+      title: newPageName,
+      description: '',
+      template: 'default',
+      noIndex: false,
+      authRequired: false
     }
     
     addPage(newPage)
+    syncPageToSource(newPage)
     setNewPageName('')
     setIsAdding(false)
   }
@@ -37,6 +43,39 @@ export function PagesPanel() {
       return
     }
     removePage(pageId)
+  }
+
+  const handlePageChange = (key: keyof Page, value: string | boolean) => {
+    if (!currentPage) return
+    updatePage(currentPage.id, { [key]: value })
+  }
+
+  const syncPageToSource = async (page: Page) => {
+    const shouldSync =
+      currentProject?.source?.roundTrip &&
+      projectPath
+
+    if (!shouldSync) return
+
+    try {
+      const result = await window.electron.syncSourcePage({
+        projectPath,
+        page: {
+          id: page.id,
+          name: page.name,
+          route: page.route,
+          title: page.title || '',
+          description: page.description || ''
+        }
+      })
+
+      if (result.route !== page.route) {
+        updatePage(page.id, { route: result.route })
+      }
+    } catch (error) {
+      console.error('Page source sync failed:', error)
+      window.showToast(`Page sync failed: ${error}`, 'error')
+    }
   }
 
   return (
@@ -138,6 +177,109 @@ export function PagesPanel() {
           </Button>
         )}
       </div>
+
+      {/* Page Properties */}
+      {currentPage && (
+        <div className="border-t p-3 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Page Properties</p>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Name</label>
+            <input
+              type="text"
+              value={currentPage.name}
+              onChange={(e) => handlePageChange('name', e.target.value)}
+              onBlur={() => {
+                const latest = useProjectStore.getState().currentPage
+                if (latest) {
+                  syncPageToSource(latest)
+                }
+              }}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Route</label>
+            <input
+              type="text"
+              value={currentPage.route}
+              onChange={(e) => handlePageChange('route', e.target.value)}
+              onBlur={() => {
+                const latest = useProjectStore.getState().currentPage
+                if (latest) {
+                  syncPageToSource(latest)
+                }
+              }}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">SEO Title</label>
+            <input
+              type="text"
+              value={currentPage.title || ''}
+              onChange={(e) => handlePageChange('title', e.target.value)}
+              onBlur={() => {
+                const latest = useProjectStore.getState().currentPage
+                if (latest) {
+                  syncPageToSource(latest)
+                }
+              }}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">SEO Description</label>
+            <textarea
+              rows={3}
+              value={currentPage.description || ''}
+              onChange={(e) => handlePageChange('description', e.target.value)}
+              onBlur={() => {
+                const latest = useProjectStore.getState().currentPage
+                if (latest) {
+                  syncPageToSource(latest)
+                }
+              }}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs text-muted-foreground">Template</label>
+            <select
+              value={currentPage.template || 'default'}
+              onChange={(e) => handlePageChange('template', e.target.value)}
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            >
+              <option value="default">Default</option>
+              <option value="landing">Landing</option>
+              <option value="docs">Docs</option>
+              <option value="dashboard">Dashboard</option>
+            </select>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean(currentPage.noIndex)}
+              onChange={(e) => handlePageChange('noIndex', e.target.checked)}
+            />
+            No-index (exclude from search engines)
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={Boolean(currentPage.authRequired)}
+              onChange={(e) => handlePageChange('authRequired', e.target.checked)}
+            />
+            Authentication required
+          </label>
+        </div>
+      )}
     </div>
   )
 }

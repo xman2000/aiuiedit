@@ -5,7 +5,7 @@ import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
 
 export function PropertiesPanel() {
   const { selectedIds, nodes, updateNode } = useCanvasStore()
-  const { setDirty } = useProjectStore()
+  const { currentProject, projectPath, setDirty } = useProjectStore()
   const selectedNodes = Array.from(selectedIds).map((id) => nodes.get(id)).filter(Boolean)
 
   if (selectedNodes.length === 0) {
@@ -26,11 +26,31 @@ export function PropertiesPanel() {
     return <div className="p-4">Unknown component type</div>
   }
 
-  const handlePropChange = (propName: string, value: any) => {
+  const handlePropChange = async (propName: string, value: any) => {
     updateNode(node.id, {
       props: { ...node.props, [propName]: value }
     })
     setDirty(true)
+
+    const shouldSyncToSource =
+      currentProject?.source?.roundTrip &&
+      projectPath &&
+      (propName === 'text' || propName === 'content') &&
+      typeof value === 'string'
+
+    if (!shouldSyncToSource) return
+
+    try {
+      await window.electron.applySourceTextEdit({
+        projectPath,
+        nodeId: node.id,
+        text: value
+      })
+      window.showToast('Source updated with atomic text patch', 'success')
+    } catch (error) {
+      console.error('Source sync failed:', error)
+      window.showToast(`Source sync failed: ${error}`, 'error')
+    }
   }
 
   const handleStyleChange = (styleProp: string, value: string) => {

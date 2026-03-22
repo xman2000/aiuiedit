@@ -14,6 +14,7 @@ export function useKeyboardShortcuts() {
     canUndo,
     canRedo,
     selectAll,
+    selectAllInPage,
     deselectAll,
     copySelected,
     paste,
@@ -46,7 +47,16 @@ export function useKeyboardShortcuts() {
       // Select All
       if (metaKey && e.key.toLowerCase() === 'a') {
         e.preventDefault()
-        selectAll()
+        if (currentProject?.pages?.length) {
+          const currentPageId = useProjectStore.getState().currentPage?.id
+          if (currentPageId) {
+            selectAllInPage(currentPageId)
+          } else {
+            selectAll()
+          }
+        } else {
+          selectAll()
+        }
       }
 
       // Deselect (Escape)
@@ -202,7 +212,7 @@ export function useKeyboardShortcuts() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, nodes, deleteNode, undo, redo, canUndo, canRedo, selectAll, deselectAll, copySelected, paste, alignSelected, distributeSelected, groupSelected, ungroupSelected, toggleLockSelected, toggleVisibilitySelected, setDirty, saveProject, currentProject])
+  }, [selectedIds, nodes, deleteNode, undo, redo, canUndo, canRedo, selectAll, selectAllInPage, deselectAll, copySelected, paste, alignSelected, distributeSelected, groupSelected, ungroupSelected, toggleLockSelected, toggleVisibilitySelected, setDirty, saveProject, currentProject])
 }
 
 // Export keyboard shortcuts map for reference

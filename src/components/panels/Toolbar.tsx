@@ -2,17 +2,20 @@ import { useAppStore } from '@/store/useAppStore'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { Button } from '@/components/common/Button'
-import { Moon, Sun, Monitor, Save, Undo, Redo, ZoomIn, ZoomOut, FileCode, FileText, Group, Ungroup, Lock, Unlock, Eye, EyeOff } from 'lucide-react'
+import { Moon, Sun, Monitor, Save, Undo, Redo, ZoomIn, ZoomOut, FileCode, FileText, Group, Ungroup, Lock, Unlock, Eye, EyeOff, RefreshCcw } from 'lucide-react'
 import { exportAsHtml, exportAsReact, exportAsVue } from '@/services/export'
 
 export function Toolbar() {
   const { settings, setSettings } = useAppStore()
-  const { currentProject, isDirty, saveProject, setDirty } = useProjectStore()
+  const { currentProject, projectPath, isDirty, saveProject, setCurrentProject, setDirty } = useProjectStore()
   const {
     nodes,
     selectedIds,
     zoom,
     setZoom,
+    setNodes,
+    setViewport,
+    deselectAll,
     undo,
     redo,
     canUndo,
@@ -121,6 +124,23 @@ export function Toolbar() {
     setDirty(true)
   }
 
+  const handleRefreshFromSource = async () => {
+    if (!currentProject?.source?.roundTrip || !projectPath) return
+
+    try {
+      const refreshed = await window.electron.refreshProjectFromSource(projectPath)
+      setCurrentProject(refreshed.project, projectPath)
+      setNodes(new Map((refreshed.canvas?.nodes || []).map((node: any) => [node.id, node])))
+      setZoom(refreshed.canvas?.zoom ?? 1)
+      setViewport(refreshed.canvas?.viewport ?? { x: 0, y: 0 })
+      deselectAll()
+      window.showToast('Canvas refreshed from source files', 'success')
+    } catch (error) {
+      console.error('Refresh from source failed:', error)
+      window.showToast(`Refresh failed: ${error}`, 'error')
+    }
+  }
+
   return (
     <div className="flex h-14 items-center justify-between border-b bg-card px-4">
       {/* Left: Logo and Project Info */}
@@ -149,6 +169,17 @@ export function Toolbar() {
         >
           <Save className="h-4 w-4" />
         </Button>
+
+        {currentProject?.source?.roundTrip && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleRefreshFromSource}
+            title="Refresh from source"
+          >
+            <RefreshCcw className="h-4 w-4" />
+          </Button>
+        )}
 
         <Button
           variant="ghost"

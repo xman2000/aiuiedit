@@ -12,19 +12,21 @@ import { useProjectStore } from '@/store/useProjectStore'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { useKeyboardShortcuts } from '@/utils/shortcuts'
 import { Button } from '@/components/common/Button'
-import { Plus } from 'lucide-react'
+import { FolderUp, Plus } from 'lucide-react'
 import { createCanvasNode } from '@/core/canvasNodeFactory'
 import type { CanvasNode } from '@/types'
 
 export function MainLayout() {
-  const { currentProject, setDirty } = useProjectStore()
+  const { currentProject, currentPage, setDirty } = useProjectStore()
   const { addNode } = useCanvasStore()
   const [activeLeftPanel, setActiveLeftPanel] = useState<'library' | 'pages' | 'design' | 'settings'>('library')
   
   useKeyboardShortcuts()
 
   const handleAddComponent = (type: string) => {
-    const newNode = createCanvasNode(type)
+    if (!currentPage) return
+
+    const newNode = createCanvasNode(type, currentPage.id)
     if (!newNode) return
 
     addNode(newNode)
@@ -125,6 +127,7 @@ function EmptyState() {
   const { setNodes, setZoom, setViewport, deselectAll } = useCanvasStore()
   const [isCreating, setIsCreating] = useState(false)
   const [isOpening, setIsOpening] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
   const [workspace, setWorkspace] = useState<string>('')
   const [existingProjects, setExistingProjects] = useState<Array<{ id: string; name: string; path: string; updatedAt?: string }>>([])
 
@@ -172,7 +175,14 @@ function EmptyState() {
       const loaded = await window.electron.loadProject(projectPath)
       setCurrentProject(loaded.project, projectPath)
 
-      const nodes = new Map<string, CanvasNode>((loaded.canvas?.nodes || []).map((node: CanvasNode) => [node.id, node]))
+      const fallbackPageId = loaded.project?.pages?.[0]?.id || 'page-1'
+      const nodes = new Map<string, CanvasNode>((loaded.canvas?.nodes || []).map((node: CanvasNode) => [
+        node.id,
+        {
+          ...node,
+          pageId: node.pageId || fallbackPageId
+        }
+      ]))
       setNodes(nodes)
       setZoom(loaded.canvas?.zoom ?? 1)
       setViewport(loaded.canvas?.viewport ?? { x: 0, y: 0 })
@@ -184,6 +194,44 @@ function EmptyState() {
       window.showToast('Failed to open project', 'error')
     } finally {
       setIsOpening(false)
+    }
+  }
+
+  const handleImportProject = async () => {
+    setIsImporting(true)
+    try {
+      const sourcePath = await window.electron.selectDirectory()
+      if (!sourcePath) return
+
+      const imported = await window.electron.importProjectFromSource(sourcePath)
+      setCurrentProject(imported.project, imported.path)
+
+      const fallbackPageId = imported.project?.pages?.[0]?.id || 'page-1'
+      const nodes = new Map<string, CanvasNode>((imported.canvas?.nodes || []).map((node: CanvasNode) => [
+        node.id,
+        {
+          ...node,
+          pageId: node.pageId || fallbackPageId
+        }
+      ]))
+      setNodes(nodes)
+      setZoom(imported.canvas?.zoom ?? 1)
+      setViewport(imported.canvas?.viewport ?? { x: 0, y: 0 })
+      deselectAll()
+
+      const projects = await window.electron.listProjects()
+      setExistingProjects((projects || []).sort((a: any, b: any) => {
+        const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime()
+        const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime()
+        return bTime - aTime
+      }))
+
+      window.showToast('Project imported. Round-trip mapping initialized.', 'success')
+    } catch (error) {
+      console.error('Failed to import project:', error)
+      window.showToast(`Import failed: ${error}`, 'error')
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -221,6 +269,17 @@ function EmptyState() {
         >
           <Plus className="mr-2 h-5 w-5" />
           {isCreating ? 'Creating...' : 'Create New Project'}
+        </Button>
+
+        <Button
+          variant="outline"
+          onClick={handleImportProject}
+          disabled={isImporting}
+          size="lg"
+          className="mt-3"
+        >
+          <FolderUp className="mr-2 h-5 w-5" />
+          {isImporting ? 'Importing...' : 'Import Existing Website'}
         </Button>
 
         {existingProjects.length > 0 && (
