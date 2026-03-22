@@ -699,28 +699,37 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
     )
   }
 
-  const applyClassOption = (group: TailwindClassGroup, optionValue: string, variant: TailwindVariantPrefix = '') => {
-    setSnapshotClassName((prev) => {
-      const nextClassName = replaceClassGroup(prev, group, optionValue, variant)
-
-      if (snapshotSelection?.id && snapshotIframeRef.current?.contentWindow) {
-        const canApplyText = !STRUCTURAL_TAGS.has(snapshotSelection.tag) && snapshotSelection.tag !== 'img'
-        snapshotIframeRef.current.contentWindow.postMessage({
-          type: 'aiuiedit-apply-text',
-          payload: {
-            id: snapshotSelection.id,
-            text: snapshotEditText,
-            applyText: canApplyText,
-            attributes: {
-              href: snapshotHref,
-              src: snapshotSrc,
-              alt: snapshotAlt,
-              className: nextClassName
-            }
-          }
-        }, '*')
+  const postSnapshotClassUpdate = (nextClassName: string) => {
+    if (!snapshotSelection?.id || !snapshotIframeRef.current?.contentWindow) return
+    const canApplyText = !STRUCTURAL_TAGS.has(snapshotSelection.tag) && snapshotSelection.tag !== 'img'
+    snapshotIframeRef.current.contentWindow.postMessage({
+      type: 'aiuiedit-apply-text',
+      payload: {
+        id: snapshotSelection.id,
+        text: snapshotEditText,
+        applyText: canApplyText,
+        attributes: {
+          href: snapshotHref,
+          src: snapshotSrc,
+          alt: snapshotAlt,
+          className: nextClassName
+        }
       }
+    }, '*')
+  }
 
+  const applyClassOption = (group: TailwindClassGroup, optionValue: string, variant: TailwindVariantPrefix = '', isActive = false) => {
+    setSnapshotClassName((prev) => {
+      const nextClassName = replaceClassGroup(prev, group, isActive ? '' : optionValue, variant)
+      postSnapshotClassUpdate(nextClassName)
+      return nextClassName
+    })
+  }
+
+  const removeClassToken = (tokenToRemove: string) => {
+    setSnapshotClassName((prev) => {
+      const nextClassName = splitClassTokens(prev).filter((token) => token !== tokenToRemove).join(' ')
+      postSnapshotClassUpdate(nextClassName)
       return nextClassName
     })
   }
@@ -917,7 +926,18 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                         <input type="text" value={snapshotClassName} onChange={(e) => setSnapshotClassName(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
                         <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
                           {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
-                            <span key={token} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">{token}</span>
+                            <div key={token} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                              <span>{token}</span>
+                              <button
+                                type="button"
+                                onClick={() => removeClassToken(token)}
+                                className="rounded px-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground"
+                                title={`Remove ${token}`}
+                                aria-label={`Remove ${token}`}
+                              >
+                                x
+                              </button>
+                            </div>
                           )) : (
                             <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
                           )}
@@ -935,7 +955,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                               {group.options.map((option) => {
                                 const isActive = snapshotClassTokens.includes(option.value)
                                 return (
-                                  <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                  <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
                                     {option.label}
                                   </button>
                                 )
@@ -960,7 +980,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                                     const classToken = `${variant.prefix}${option.value}`
                                     const isActive = snapshotClassTokens.includes(classToken)
                                     return (
-                                      <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                      <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
                                         {option.label}
                                       </button>
                                     )
