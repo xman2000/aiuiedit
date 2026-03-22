@@ -3,6 +3,8 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Toolbar } from '@/components/panels/Toolbar'
 import { ComponentLibrary } from '@/components/library/ComponentLibrary'
 import { DesignSystemPanel } from '@/components/panels/DesignSystemPanel'
+import { PagesPanel } from '@/components/panels/PagesPanel'
+import { SettingsPanel } from '@/components/panels/SettingsPanel'
 import { Canvas } from '@/components/canvas/engine/Canvas'
 import { PropertiesPanel } from '@/components/panels/PropertiesPanel'
 import { ChatPanel } from '@/components/panels/ChatPanel'
@@ -18,7 +20,7 @@ import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
 export function MainLayout() {
   const { currentProject } = useProjectStore()
   const { addNode, pushHistory } = useCanvasStore()
-  const [activeLeftPanel, setActiveLeftPanel] = useState<'library' | 'design'>('library')
+  const [activeLeftPanel, setActiveLeftPanel] = useState<'library' | 'pages' | 'design' | 'settings'>('library')
   
   useKeyboardShortcuts()
 
@@ -63,7 +65,7 @@ export function MainLayout() {
                 <div className="flex border-b">
                   <button
                     onClick={() => setActiveLeftPanel('library')}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex-1 px-3 py-3 text-sm font-medium transition-colors ${
                       activeLeftPanel === 'library'
                         ? 'border-b-2 border-primary text-primary'
                         : 'text-muted-foreground hover:text-foreground'
@@ -72,8 +74,18 @@ export function MainLayout() {
                     Library
                   </button>
                   <button
+                    onClick={() => setActiveLeftPanel('pages')}
+                    className={`flex-1 px-3 py-3 text-sm font-medium transition-colors ${
+                      activeLeftPanel === 'pages'
+                        ? 'border-b-2 border-primary text-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Pages
+                  </button>
+                  <button
                     onClick={() => setActiveLeftPanel('design')}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                    className={`flex-1 px-3 py-3 text-sm font-medium transition-colors ${
                       activeLeftPanel === 'design'
                         ? 'border-b-2 border-primary text-primary'
                         : 'text-muted-foreground hover:text-foreground'
@@ -81,10 +93,23 @@ export function MainLayout() {
                   >
                     Design
                   </button>
+                  <button
+                    onClick={() => setActiveLeftPanel('settings')}
+                    className={`flex-1 px-3 py-3 text-sm font-medium transition-colors ${
+                      activeLeftPanel === 'settings'
+                        ? 'border-b-2 border-primary text-primary'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Settings
+                  </button>
                 </div>
                 
                 <div className="flex-1 overflow-auto">
-                  {activeLeftPanel === 'library' ? <ComponentLibrary onAddComponent={handleAddComponent} /> : <DesignSystemPanel />}
+                  {activeLeftPanel === 'library' && <ComponentLibrary onAddComponent={handleAddComponent} />}
+                  {activeLeftPanel === 'pages' && <PagesPanel />}
+                  {activeLeftPanel === 'design' && <DesignSystemPanel />}
+                  {activeLeftPanel === 'settings' && <SettingsPanel />}
                 </div>
               </div>
             </Panel>

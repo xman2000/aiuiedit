@@ -10,12 +10,17 @@ interface CanvasNodeProps {
   scale: number
 }
 
+type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | null
+
 export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: CanvasNodeProps) {
   const nodeRef = useRef<HTMLDivElement>(null)
-  const { updateNode } = useCanvasStore()
+  const { updateNode, pushHistory } = useCanvasStore()
   const [isDragging, setIsDragging] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
+  const [resizeHandle, setResizeHandle] = useState<ResizeHandle>(null)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 })
+  const [initialSize, setInitialSize] = useState({ width: 0, height: 0 })
 
   const component = BUILT_IN_COMPONENTS.find(c => c.type === node.type)
 
@@ -31,24 +36,72 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
   }, [node.position, onSelect])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isDragging) return
-    
-    const deltaX = (e.clientX - dragStart.x) / scale
-    const deltaY = (e.clientY - dragStart.y) / scale
-    
-    updateNode(node.id, {
-      position: {
-        x: initialPosition.x + deltaX,
-        y: initialPosition.y + deltaY
+    if (isDragging) {
+      const deltaX = (e.clientX - dragStart.x) / scale
+      const deltaY = (e.clientY - dragStart.y) / scale
+      
+      updateNode(node.id, {
+        position: {
+          x: initialPosition.x + deltaX,
+          y: initialPosition.y + deltaY
+        }
+      })
+    } else if (isResizing && resizeHandle) {
+      const deltaX = (e.clientX - dragStart.x) / scale
+      const deltaY = (e.clientY - dragStart.y) / scale
+      
+      let newWidth = initialSize.width
+      let newHeight = initialSize.height
+      let newX = initialPosition.x
+      let newY = initialPosition.y
+
+      // Handle horizontal resizing
+      if (resizeHandle.includes('e')) {
+        newWidth = Math.max(20, initialSize.width + deltaX)
+      } else if (resizeHandle.includes('w')) {
+        const proposedWidth = Math.max(20, initialSize.width - deltaX)
+        newX = initialPosition.x + (initialSize.width - proposedWidth)
+        newWidth = proposedWidth
       }
-    })
-  }, [isDragging, dragStart, initialPosition, scale, node.id, updateNode])
+
+      // Handle vertical resizing
+      if (resizeHandle.includes('s')) {
+        newHeight = Math.max(20, initialSize.height + deltaY)
+      } else if (resizeHandle.includes('n')) {
+        const proposedHeight = Math.max(20, initialSize.height - deltaY)
+        newY = initialPosition.y + (initialSize.height - proposedHeight)
+        newHeight = proposedHeight
+      }
+
+      updateNode(node.id, {
+        position: { x: newX, y: newY },
+        size: { width: newWidth, height: newHeight }
+      })
+    }
+  }, [isDragging, isResizing, resizeHandle, dragStart, initialPosition, initialSize, scale, node.id, updateNode])
 
   const handleMouseUp = useCallback(() => {
-    if (isDragging) {
-      setIsDragging(false)
+    if (isDragging || isResizing) {
+      pushHistory()
     }
-  }, [isDragging])
+    setIsDragging(false)
+    setIsResizing(false)
+    setResizeHandle(null)
+  }, [isDragging, isResizing, pushHistory])
+
+  const handleResizeStart = useCallback((e: React.MouseEvent, handle: ResizeHandle) => {
+    e.stopPropagation()
+    e.preventDefault()
+    
+    setIsResizing(true)
+    setResizeHandle(handle)
+    setDragStart({ x: e.clientX, y: e.clientY })
+    setInitialPosition({ x: node.position.x, y: node.position.y })
+    setInitialSize({ 
+      width: typeof node.size.width === 'number' ? node.size.width : parseInt(node.size.width as string) || 100, 
+      height: typeof node.size.height === 'number' ? node.size.height : parseInt(node.size.height as string) || 100 
+    })
+  }, [node.position, node.size])
 
   const renderContent = () => {
     switch (node.type) {
@@ -129,6 +182,9 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
 
   if (!component) return null
 
+  const width = typeof node.size.width === 'number' ? node.size.width : parseInt(node.size.width as string) || 100
+  const height = typeof node.size.height === 'number' ? node.size.height : parseInt(node.size.height as string) || 100
+
   return (
     <div
       ref={nodeRef}
@@ -140,15 +196,82 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
         position: 'absolute',
         left: node.position.x,
         top: node.position.y,
-        width: node.size.width,
-        height: node.size.height,
-        cursor: isDragging ? 'grabbing' : 'grab',
+        width: width,
+        height: height,
+        cursor: isDragging ? 'grabbing' : isResizing ? 'grabbing' : 'grab',
         userSelect: 'none',
         boxSizing: 'border-box'
       }}
       className={isSelected ? 'selection-outline' : ''}
     >
       {renderContent()}
+      
+      {/* Resize Handles */}
+      {isSelected && !isDragging && (
+        <>
+          {/* Corner handles */}
+          <ResizeHandle position="nw" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
+          <ResizeHandle position="ne" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
+          <ResizeHandle position="sw" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
+          <ResizeHandle position="se" onMouseDown={(e) => handleResizeStart(e, 'se')} />
+          
+          {/* Edge handles */}
+          <ResizeHandle position="n" onMouseDown={(e) => handleResizeStart(e, 'n')} />
+          <ResizeHandle position="s" onMouseDown={(e) => handleResizeStart(e, 's')} />
+          <ResizeHandle position="e" onMouseDown={(e) => handleResizeStart(e, 'e')} />
+          <ResizeHandle position="w" onMouseDown={(e) => handleResizeStart(e, 'w')} />
+        </>
+      )}
     </div>
+  )
+}
+
+interface ResizeHandleProps {
+  position: 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w'
+  onMouseDown: (e: React.MouseEvent) => void
+}
+
+function ResizeHandle({ position, onMouseDown }: ResizeHandleProps) {
+  const getPosition = () => {
+    switch (position) {
+      case 'nw': return { left: -4, top: -4 }
+      case 'n': return { left: '50%', top: -4, transform: 'translateX(-50%)' }
+      case 'ne': return { right: -4, top: -4 }
+      case 'e': return { right: -4, top: '50%', transform: 'translateY(-50%)' }
+      case 'se': return { right: -4, bottom: -4 }
+      case 's': return { left: '50%', bottom: -4, transform: 'translateX(-50%)' }
+      case 'sw': return { left: -4, bottom: -4 }
+      case 'w': return { left: -4, top: '50%', transform: 'translateY(-50%)' }
+    }
+  }
+
+  const getCursor = () => {
+    switch (position) {
+      case 'nw':
+      case 'se': return 'nwse-resize'
+      case 'ne':
+      case 'sw': return 'nesw-resize'
+      case 'n':
+      case 's': return 'ns-resize'
+      case 'e':
+      case 'w': return 'ew-resize'
+    }
+  }
+
+  return (
+    <div
+      onMouseDown={onMouseDown}
+      style={{
+        position: 'absolute',
+        width: 8,
+        height: 8,
+        backgroundColor: 'hsl(var(--primary))',
+        border: '2px solid white',
+        borderRadius: position.length === 2 ? '50%' : position === 'n' || position === 's' ? '4px' : '4px',
+        ...getPosition(),
+        cursor: getCursor(),
+        zIndex: 10
+      }}
+    />
   )
 }

@@ -85,6 +85,7 @@ export interface AppSettings {
   aiModel: string
   recentProjects: string[]
   shortcuts: Record<string, string>
+  openRouterApiKey?: string
 }
 
 // AI types

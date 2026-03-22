@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { useProjectStore } from '@/store/useProjectStore'
+import { useAppStore } from '@/store/useAppStore'
 import { Button } from '@/components/common/Button'
-import { Send, Image as ImageIcon, Sparkles, ChevronUp, ChevronDown, Wand2 } from 'lucide-react'
+import { Send, Image as ImageIcon, Sparkles, ChevronUp, ChevronDown, Wand2, Settings } from 'lucide-react'
 import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
+import { AIService, createAIService } from '@/services/ai'
 import type { CanvasNode } from '@/types'
 
 interface Message {
@@ -12,6 +14,7 @@ interface Message {
   content: string
   timestamp: Date
   actions?: AIAction[]
+  error?: boolean
 }
 
 interface AIAction {
@@ -22,21 +25,39 @@ interface AIAction {
 export function ChatPanel() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [input, setInput] = useState('')
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Hello! I\'m your local AI assistant. I\'m running entirely on your machine - no OpenRouter connection needed. I can understand commands like "add a button", "make this green", or "move this up 10px". Select elements and tell me what to do!',
-      timestamp: new Date()
-    }
-  ])
+  const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { selectedIds, nodes, addNode, updateNode, pushHistory } = useCanvasStore()
+  const { selectedIds, nodes, addNode, updateNode, deleteNode, pushHistory } = useCanvasStore()
   const { currentProject, updateDesignSystem } = useProjectStore()
+  const { settings } = useAppStore()
+  
+  // Create AI service with current settings
+  const [aiService] = useState(() => 
+    createAIService(settings.openRouterApiKey, settings.aiModel)
+  )
 
   const selectedCount = selectedIds.size
   const selectedNodes = Array.from(selectedIds).map(id => nodes.get(id)).filter(Boolean) as CanvasNode[]
+
+  // Set initial welcome message based on API key status
+  useEffect(() => {
+    if (settings.openRouterApiKey) {
+      setMessages([{
+        id: 'welcome',
+        role: 'assistant',
+        content: `Hello! I'm your AI assistant powered by OpenRouter (${settings.aiModel}). I can help you design UI, add components, modify styles, and more. What would you like to do?`,
+        timestamp: new Date()
+      }])
+    } else {
+      setMessages([{
+        id: 'welcome',
+        role: 'assistant',
+        content: 'Hello! Add your OpenRouter API key in Settings to enable AI assistance. I can help you design UI, add components, and modify styles.',
+        timestamp: new Date()
+      }])
+    }
+  }, [settings.openRouterApiKey, settings.aiModel])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -46,7 +67,7 @@ export function ChatPanel() {
     if (!input.trim() || !currentProject) return
 
     const userMessage: Message = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: Date.now().toString(),
       role: 'user',
       content: input,
       timestamp: new Date()
@@ -56,151 +77,114 @@ export function ChatPanel() {
     setInput('')
     setIsLoading(true)
 
-    // Process the command locally (simulating AI)
-    setTimeout(() => {
-      const response = processCommand(input, selectedNodes, currentProject?.designSystem)
+    try {
+      // Get all canvas nodes for context
+      const allNodes = Array.from(nodes.values())
       
+      const response = await aiService.sendMessage(input, {
+        selectedNodes,
+        designSystem: currentProject.designSystem,
+        canvasNodes: allNodes
+      })
+
+      // Convert service actions to UI actions
+      const actions: AIAction[] = []
+      
+      if (response.actions) {
+        for (const action of response.actions) {
+          switch (action.type) {
+            case 'add_component':
+              if (action.componentType) {
+                const component = BUILT_IN_COMPONENTS.find(c => c.type === action.componentType)
+                if (component) {
+                  actions.push({
+                    label: `Add ${component.name}`,
+                    action: () => {
+                      const newNode: CanvasNode = {
+                        id: `node-${Date.now()}`,
+                        type: component.type,
+                        parentId: null,
+                        position: { x: 200, y: 200 },
+                        size: { 
+                          width: component.type === 'container' ? 300 : component.type === 'button' ? 120 : 200, 
+                          height: component.type === 'container' ? 200 : component.type === 'input' ? 40 : 'auto' as any
+                        },
+                        style: component.defaultStyle,
+                        props: component.defaultProps,
+                        children: [],
+                        name: component.name,
+                        locked: false,
+                        visible: true
+                      }
+                      addNode(newNode)
+                      pushHistory()
+                      window.showToast?.(`${component.name} added!`, 'success')
+                    }
+                  })
+                }
+              }
+              break
+            
+            case 'modify_style':
+              if (selectedNodes.length > 0) {
+                actions.push({
+                  label: 'Apply Changes',
+                  action: () => {
+                    // Extract color from message if present
+                    const colorMatch = response.message.match(/#([0-9A-Fa-f]{6})/i)
+                    if (colorMatch) {
+                      const color = '#' + colorMatch[1]
+                      selectedNodes.forEach(node => {
+                        updateNode(node.id, {
+                          style: { ...node.style, backgroundColor: color }
+                        })
+                      })
+                      pushHistory()
+                      window.showToast?.('Style updated!', 'success')
+                    }
+                  }
+                })
+              }
+              break
+            
+            case 'delete':
+              if (selectedNodes.length > 0) {
+                actions.push({
+                  label: `Delete ${selectedNodes.length} element(s)`,
+                  action: () => {
+                    selectedNodes.forEach(node => deleteNode(node.id))
+                    pushHistory()
+                    window.showToast?.('Elements deleted!', 'success')
+                  }
+                })
+              }
+              break
+          }
+        }
+      }
+
       const aiMessage: Message = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Date.now().toString(),
         role: 'assistant',
         content: response.message,
         timestamp: new Date(),
-        actions: response.actions
+        actions: actions.length > 0 ? actions : undefined,
+        error: !!response.error
       }
       
       setMessages((prev) => [...prev, aiMessage])
+    } catch (error) {
+      console.error('AI Error:', error)
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'Sorry, I encountered an error. Please check your API key and try again.',
+        timestamp: new Date(),
+        error: true
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
       setIsLoading(false)
-    }, 500)
-  }
-
-  const processCommand = (command: string, selected: CanvasNode[], designSystem: any) => {
-    const cmd = command.toLowerCase()
-    
-    // Add component commands
-    if (cmd.includes('add') || cmd.includes('create')) {
-      const componentType = BUILT_IN_COMPONENTS.find(c => 
-        cmd.includes(c.type) || cmd.includes(c.name.toLowerCase())
-      )
-      
-      if (componentType) {
-        return {
-          message: `I'll add a ${componentType.name} to the canvas.`,
-          actions: [{
-            label: `Add ${componentType.name}`,
-            action: () => {
-              const newNode: CanvasNode = {
-                id: `node-${Date.now()}`,
-                type: componentType.type,
-                parentId: null,
-                position: { x: 200, y: 200 },
-                size: { 
-                  width: componentType.type === 'container' ? 300 : componentType.type === 'button' ? 120 : 200, 
-                  height: componentType.type === 'container' ? 200 : componentType.type === 'input' ? 40 : 'auto' as any
-                },
-                style: componentType.defaultStyle,
-                props: componentType.defaultProps,
-                children: [],
-                name: componentType.name,
-                locked: false,
-                visible: true
-              }
-              addNode(newNode)
-              pushHistory()
-              window.showToast?.(`${componentType.name} added!`, 'success')
-            }
-          }]
-        }
-      }
-    }
-
-    // Color commands
-    if (selected.length > 0 && (cmd.includes('color') || cmd.includes('green') || cmd.includes('blue') || cmd.includes('red'))) {
-      let color = '#3B82F6'
-      if (cmd.includes('green')) color = '#10B981'
-      if (cmd.includes('red')) color = '#EF4444'
-      if (cmd.includes('blue')) color = '#3B82F6'
-      if (cmd.includes('yellow')) color = '#F59E0B'
-      if (cmd.includes('purple')) color = '#8B5CF6'
-      
-      return {
-        message: `I'll change the background color to ${color} for ${selected.length} element(s).`,
-        actions: [{
-          label: 'Apply Color',
-          action: () => {
-            selected.forEach(node => {
-              updateNode(node.id, {
-                style: { ...node.style, backgroundColor: color }
-              })
-            })
-            pushHistory()
-            window.showToast?.('Color updated!', 'success')
-          }
-        }]
-      }
-    }
-
-    // Position commands
-    if (selected.length > 0 && (cmd.includes('move') || cmd.includes('up') || cmd.includes('down') || cmd.includes('left') || cmd.includes('right'))) {
-      let deltaX = 0
-      let deltaY = 0
-      let amount = 10
-      
-      const match = cmd.match(/(\d+)/)
-      if (match) amount = parseInt(match[1])
-      
-      if (cmd.includes('up')) deltaY = -amount
-      if (cmd.includes('down')) deltaY = amount
-      if (cmd.includes('left')) deltaX = -amount
-      if (cmd.includes('right')) deltaX = amount
-      
-      return {
-        message: `I'll move the selected element(s) ${amount}px ${cmd.includes('up') ? 'up' : cmd.includes('down') ? 'down' : cmd.includes('left') ? 'left' : 'right'}.`,
-        actions: [{
-          label: 'Move Elements',
-          action: () => {
-            selected.forEach(node => {
-              updateNode(node.id, {
-                position: { 
-                  x: node.position.x + deltaX, 
-                  y: node.position.y + deltaY 
-                }
-              })
-            })
-            pushHistory()
-            window.showToast?.('Elements moved!', 'success')
-          }
-        }]
-      }
-    }
-
-    // Design system commands
-    if (cmd.includes('primary color') || cmd.includes('theme')) {
-      const colorMatch = cmd.match(/#([0-9A-Fa-f]{6})/)
-      if (colorMatch) {
-        const color = '#' + colorMatch[1]
-        return {
-          message: `I'll update the primary color in your design system to ${color}.`,
-          actions: [{
-            label: 'Update Design System',
-            action: () => {
-              updateDesignSystem({
-                ...designSystem,
-                colors: {
-                  ...designSystem.colors,
-                  primary: { name: 'Primary', value: color }
-                }
-              })
-              window.showToast?.('Design system updated!', 'success')
-            }
-          }]
-        }
-      }
-    }
-
-    // Default response
-    return {
-      message: `I understand you want to: "${command}". In the full version, I'll connect to OpenRouter to provide intelligent responses. For now, try commands like:\n\n• "Add a button"\n• "Make this green/blue/red"\n• "Move this up 10px"\n• "Update primary color to #FF5733"`,
-      actions: []
     }
   }
 
@@ -217,6 +201,12 @@ export function ChatPanel() {
             <span className="font-medium">AI Assistant</span>
           </div>
           
+          {!settings.openRouterApiKey && (
+            <span className="rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs text-yellow-600">
+              Configure API Key
+            </span>
+          )}
+          
           {selectedCount > 0 && (
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs text-primary">
               {selectedCount} selected
@@ -224,13 +214,27 @@ export function ChatPanel() {
           )}
         </div>
 
-        <button className="rounded p-1 hover:bg-muted">
-          {isExpanded ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronUp className="h-4 w-4" />
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              // Open settings - you can add a settings modal trigger here
+              window.showToast?.('Open Settings to configure API key', 'info')
+            }}
+            className="rounded p-1.5 hover:bg-muted transition-colors"
+            title="Settings"
+          >
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </button>
+          
+          <button className="rounded p-1 hover:bg-muted">
+            {isExpanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronUp className="h-4 w-4" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
@@ -249,6 +253,8 @@ export function ChatPanel() {
                     className={`max-w-[90%] rounded-lg px-4 py-2 text-sm ${
                       message.role === 'user'
                         ? 'bg-primary text-primary-foreground'
+                        : message.error
+                        ? 'bg-red-500/10 border border-red-500/50 text-red-700 dark:text-red-400'
                         : 'bg-muted'
                     }`}
                   >
@@ -261,7 +267,6 @@ export function ChatPanel() {
                             key={idx}
                             onClick={() => {
                               action.action()
-                              setMessages(prev => prev.filter(m => m.id !== message.id))
                             }}
                             className="flex items-center gap-1 rounded bg-primary px-2 py-1 text-xs text-primary-foreground hover:bg-primary/90"
                           >
@@ -304,24 +309,29 @@ export function ChatPanel() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                 placeholder={
-                  selectedCount > 0
-                    ? "Tell me what to do with the selected elements..."
-                    : "Ask me to create something..."
+                  settings.openRouterApiKey
+                    ? selectedCount > 0
+                      ? "Tell me what to do with the selected elements..."
+                      : "Ask me to create something..."
+                    : "Add API key in Settings to use AI..."
                 }
-                className="flex-1 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                disabled={!settings.openRouterApiKey}
+                className="flex-1 rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50 disabled:cursor-not-allowed"
               />
               
               <Button 
                 size="icon" 
                 onClick={handleSend}
-                disabled={!input.trim() || isLoading}
+                disabled={!input.trim() || isLoading || !settings.openRouterApiKey}
               >
                 <Send className="h-4 w-4" />
               </Button>
             </div>
             
             <p className="mt-2 text-xs text-muted-foreground">
-              Try: "Create a login form" | "Make this green" | "Move this up 10px" | "Add a button"
+              {settings.openRouterApiKey 
+                ? "Try: 'Create a login form' | 'Make this green' | 'Move this up 10px' | 'Add a button'" 
+                : "Click the settings icon above to add your OpenRouter API key"}
             </p>
           </div>
         </>
