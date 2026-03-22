@@ -84,12 +84,14 @@ declare global {
           src?: string
           alt?: string
           className?: string
+          style?: string
         }
         newAttributes: {
           href?: string
           src?: string
           alt?: string
           className?: string
+          style?: string
         }
       }) => Promise<{ success: boolean; sourceFile: string; changes: string[] }>
       capturePreviewRoute: (payload: {

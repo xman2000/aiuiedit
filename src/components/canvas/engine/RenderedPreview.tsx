@@ -32,6 +32,7 @@ interface SnapshotSelection {
     src?: string
     alt?: string
     className?: string
+    style?: string
   }
 }
 
@@ -270,6 +271,46 @@ function splitClassTokens(value: string): string[] {
     .filter(Boolean)
 }
 
+function parseInlineStyle(styleText: string): Record<string, string> {
+  return styleText
+    .split(';')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .reduce<Record<string, string>>((acc, declaration) => {
+      const dividerIndex = declaration.indexOf(':')
+      if (dividerIndex <= 0) return acc
+      const key = declaration.slice(0, dividerIndex).trim().toLowerCase()
+      const value = declaration.slice(dividerIndex + 1).trim()
+      if (key && value) {
+        acc[key] = value
+      }
+      return acc
+    }, {})
+}
+
+function stringifyInlineStyle(styleMap: Record<string, string>): string {
+  return Object.entries(styleMap)
+    .filter(([key, value]) => key.trim() && value.trim())
+    .map(([key, value]) => `${key}: ${value}`)
+    .join('; ')
+}
+
+function upsertInlineStyleProperty(styleText: string, property: string, value: string): string {
+  const styleMap = parseInlineStyle(styleText)
+  const normalizedProperty = property.trim().toLowerCase()
+  const nextValue = value.trim()
+
+  if (!normalizedProperty) return styleText
+
+  if (!nextValue) {
+    delete styleMap[normalizedProperty]
+  } else {
+    styleMap[normalizedProperty] = nextValue
+  }
+
+  return stringifyInlineStyle(styleMap)
+}
+
 function splitVariantToken(token: string): { prefix: TailwindVariantPrefix; base: string } {
   const variantMatch = token.match(/^(sm:|md:|lg:|xl:)(.+)$/)
   if (!variantMatch) {
@@ -446,7 +487,8 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
             href: el.getAttribute('href') || undefined,
             src: el.getAttribute('src') || undefined,
             alt: el.getAttribute('alt') || undefined,
-            className: el.getAttribute('class') || undefined
+            className: el.getAttribute('class') || undefined,
+            style: el.getAttribute('style') || undefined
           }
         }
       }, '*');
@@ -471,6 +513,7 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
         el.setAttribute('class', attributes.className);
         applyInlinePreviewStyles(el);
       }
+      if(typeof attributes.style === 'string') el.setAttribute('style', attributes.style);
       window.parent.postMessage({
         type: 'aiuiedit-updated',
         payload: {
@@ -480,7 +523,8 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
             href: el.getAttribute('href') || undefined,
             src: el.getAttribute('src') || undefined,
             alt: el.getAttribute('alt') || undefined,
-            className: el.getAttribute('class') || undefined
+            className: el.getAttribute('class') || undefined,
+            style: el.getAttribute('style') || undefined
           }
         }
       }, '*');
@@ -518,7 +562,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [snapshotSrc, setSnapshotSrc] = useState('')
   const [snapshotAlt, setSnapshotAlt] = useState('')
   const [snapshotClassName, setSnapshotClassName] = useState('')
-  const [inspectorTab, setInspectorTab] = useState<'content' | 'style' | 'layout'>('content')
+  const [snapshotStyle, setSnapshotStyle] = useState('')
   const timeoutRef = useRef<number | null>(null)
   const snapshotIframeRef = useRef<HTMLIFrameElement | null>(null)
 
@@ -537,6 +581,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   }, [snapshotHtml, previewUrl])
 
   const snapshotClassTokens = useMemo(() => splitClassTokens(snapshotClassName), [snapshotClassName])
+  const snapshotStyleMap = useMemo(() => parseInlineStyle(snapshotStyle), [snapshotStyle])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -554,7 +599,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             href: data.payload.attributes?.href,
             src: data.payload.attributes?.src,
             alt: data.payload.attributes?.alt,
-            className: data.payload.attributes?.className
+            className: data.payload.attributes?.className,
+            style: data.payload.attributes?.style
           }
         }
         setSnapshotSelection(selected)
@@ -563,6 +609,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
         setSnapshotSrc(selected.attributes.src || '')
         setSnapshotAlt(selected.attributes.alt || '')
         setSnapshotClassName(selected.attributes.className || '')
+        setSnapshotStyle(selected.attributes.style || '')
       }
 
       if (data.type === 'aiuiedit-updated' && data.payload && snapshotSelection?.id === data.payload.id) {
@@ -573,7 +620,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             href: data.payload.attributes?.href ?? prev.attributes.href,
             src: data.payload.attributes?.src ?? prev.attributes.src,
             alt: data.payload.attributes?.alt ?? prev.attributes.alt,
-            className: data.payload.attributes?.className ?? prev.attributes.className
+            className: data.payload.attributes?.className ?? prev.attributes.className,
+            style: data.payload.attributes?.style ?? prev.attributes.style
           }
         } : prev)
       }
@@ -689,7 +737,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
           href: snapshotHref,
           src: snapshotSrc,
           alt: snapshotAlt,
-          className: snapshotClassName
+          className: snapshotClassName,
+          style: snapshotStyle
         }
       }
     }, '*')
@@ -699,7 +748,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
     )
   }
 
-  const postSnapshotClassUpdate = (nextClassName: string) => {
+  const postSnapshotAttributeUpdate = (nextAttributes: { className?: string; style?: string }) => {
     if (!snapshotSelection?.id || !snapshotIframeRef.current?.contentWindow) return
     const canApplyText = !STRUCTURAL_TAGS.has(snapshotSelection.tag) && snapshotSelection.tag !== 'img'
     snapshotIframeRef.current.contentWindow.postMessage({
@@ -712,7 +761,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
           href: snapshotHref,
           src: snapshotSrc,
           alt: snapshotAlt,
-          className: nextClassName
+          className: nextAttributes.className ?? snapshotClassName,
+          style: nextAttributes.style ?? snapshotStyle
         }
       }
     }, '*')
@@ -721,7 +771,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const applyClassOption = (group: TailwindClassGroup, optionValue: string, variant: TailwindVariantPrefix = '', isActive = false) => {
     setSnapshotClassName((prev) => {
       const nextClassName = replaceClassGroup(prev, group, isActive ? '' : optionValue, variant)
-      postSnapshotClassUpdate(nextClassName)
+      postSnapshotAttributeUpdate({ className: nextClassName })
       return nextClassName
     })
   }
@@ -729,8 +779,16 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const removeClassToken = (tokenToRemove: string) => {
     setSnapshotClassName((prev) => {
       const nextClassName = splitClassTokens(prev).filter((token) => token !== tokenToRemove).join(' ')
-      postSnapshotClassUpdate(nextClassName)
+      postSnapshotAttributeUpdate({ className: nextClassName })
       return nextClassName
+    })
+  }
+
+  const applyInlineStyleValue = (property: string, value: string) => {
+    setSnapshotStyle((prev) => {
+      const nextStyle = upsertInlineStyleProperty(prev, property, value)
+      postSnapshotAttributeUpdate({ style: nextStyle })
+      return nextStyle
     })
   }
 
@@ -748,7 +806,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
       (snapshotSelection.attributes.href || '') !== snapshotHref ||
       (snapshotSelection.attributes.src || '') !== snapshotSrc ||
       (snapshotSelection.attributes.alt || '') !== snapshotAlt ||
-      (snapshotSelection.attributes.className || '') !== snapshotClassName
+      (snapshotSelection.attributes.className || '') !== snapshotClassName ||
+      (snapshotSelection.attributes.style || '') !== snapshotStyle
 
     if (!hasTextChange && !hasAttrChange) {
       window.showToast('No rendered changes to apply', 'info')
@@ -767,7 +826,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
           href: snapshotHref,
           src: snapshotSrc,
           alt: snapshotAlt,
-          className: snapshotClassName
+          className: snapshotClassName,
+          style: snapshotStyle
         }
       })
 
@@ -780,7 +840,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
               href: snapshotHref || undefined,
               src: snapshotSrc || undefined,
               alt: snapshotAlt || undefined,
-              className: snapshotClassName || undefined
+              className: snapshotClassName || undefined,
+              style: snapshotStyle || undefined
             }
           }
         : prev))
@@ -865,7 +926,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             }}
           />
         ) : snapshotDocument ? (
-          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_460px]">
             <iframe
               ref={snapshotIframeRef}
               key={`snapshot-${previewUrl}-${refreshToken}`}
@@ -883,115 +944,169 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                     <p className="mt-1 text-[11px] text-muted-foreground">Container/card mode: edit classes and attributes here; text editing is disabled to avoid flattening child content.</p>
                   )}
 
-                  <div className="mt-2 grid grid-cols-3 gap-1 rounded-md border bg-muted/30 p-1">
-                    <button type="button" onClick={() => setInspectorTab('content')} className={inspectorTab === 'content' ? 'rounded bg-background px-2 py-1 text-[11px] font-medium' : 'rounded px-2 py-1 text-[11px] text-muted-foreground'}>Content</button>
-                    <button type="button" onClick={() => setInspectorTab('style')} className={inspectorTab === 'style' ? 'rounded bg-background px-2 py-1 text-[11px] font-medium' : 'rounded px-2 py-1 text-[11px] text-muted-foreground'}>Style</button>
-                    <button type="button" onClick={() => setInspectorTab('layout')} className={inspectorTab === 'layout' ? 'rounded bg-background px-2 py-1 text-[11px] font-medium' : 'rounded px-2 py-1 text-[11px] text-muted-foreground'}>Layout</button>
-                  </div>
-
                   <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                    {inspectorTab === 'content' && (
-                      <>
-                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text</label>
-                        <textarea
-                          value={snapshotEditText}
-                          onChange={(e) => setSnapshotEditText(e.target.value)}
-                          disabled={snapshotSelection.isStructural || snapshotSelection.tag === 'img'}
-                          className="h-36 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Content</p>
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text</label>
+                      <textarea
+                        value={snapshotEditText}
+                        onChange={(e) => setSnapshotEditText(e.target.value)}
+                        disabled={snapshotSelection.isStructural || snapshotSelection.tag === 'img'}
+                        className="h-28 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                      />
+                      {(snapshotSelection.tag === 'a' || snapshotSelection.attributes.href !== undefined) && (
+                        <>
+                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Href</label>
+                          <input type="text" value={snapshotHref} onChange={(e) => setSnapshotHref(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                        </>
+                      )}
+                      {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.src !== undefined) && (
+                        <>
+                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Src</label>
+                          <input type="text" value={snapshotSrc} onChange={(e) => setSnapshotSrc(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                        </>
+                      )}
+                      {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.alt !== undefined) && (
+                        <>
+                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Alt</label>
+                          <input type="text" value={snapshotAlt} onChange={(e) => setSnapshotAlt(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                        </>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Classes</p>
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
+                      <input
+                        type="text"
+                        value={snapshotClassName}
+                        onChange={(e) => {
+                          const nextClassName = e.target.value
+                          setSnapshotClassName(nextClassName)
+                          postSnapshotAttributeUpdate({ className: nextClassName })
+                        }}
+                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                      />
+                      <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
+                        {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
+                          <div key={token} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                            <span>{token}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeClassToken(token)}
+                              className="rounded px-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground"
+                              title={`Remove ${token}`}
+                              aria-label={`Remove ${token}`}
+                            >
+                              x
+                            </button>
+                          </div>
+                        )) : (
+                          <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/20 p-2">
+                      <p className="col-span-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Typography / Inline CSS</p>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Family</label>
+                        <input
+                          type="text"
+                          value={snapshotStyleMap['font-family'] || ''}
+                          onChange={(e) => applyInlineStyleValue('font-family', e.target.value)}
+                          placeholder="Inter, serif, etc"
+                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
                         />
-                        {(snapshotSelection.tag === 'a' || snapshotSelection.attributes.href !== undefined) && (
-                          <>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Href</label>
-                            <input type="text" value={snapshotHref} onChange={(e) => setSnapshotHref(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                          </>
-                        )}
-                        {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.src !== undefined) && (
-                          <>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Src</label>
-                            <input type="text" value={snapshotSrc} onChange={(e) => setSnapshotSrc(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                          </>
-                        )}
-                        {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.alt !== undefined) && (
-                          <>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Alt</label>
-                            <input type="text" value={snapshotAlt} onChange={(e) => setSnapshotAlt(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                          </>
-                        )}
-                      </>
-                    )}
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Size</label>
+                        <input
+                          type="text"
+                          value={snapshotStyleMap['font-size'] || ''}
+                          onChange={(e) => applyInlineStyleValue('font-size', e.target.value)}
+                          placeholder="16px"
+                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Weight</label>
+                        <input
+                          type="text"
+                          value={snapshotStyleMap['font-weight'] || ''}
+                          onChange={(e) => applyInlineStyleValue('font-weight', e.target.value)}
+                          placeholder="400 / bold"
+                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Line Height</label>
+                        <input
+                          type="text"
+                          value={snapshotStyleMap['line-height'] || ''}
+                          onChange={(e) => applyInlineStyleValue('line-height', e.target.value)}
+                          placeholder="1.5"
+                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Inline Style</label>
+                        <textarea
+                          value={snapshotStyle}
+                          onChange={(e) => {
+                            const nextStyle = e.target.value
+                            setSnapshotStyle(nextStyle)
+                            postSnapshotAttributeUpdate({ style: nextStyle })
+                          }}
+                          placeholder="font-family: Inter; font-size: 18px;"
+                          className="h-20 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
+                        />
+                      </div>
+                    </div>
 
-                    {(inspectorTab === 'style' || inspectorTab === 'layout') && (
-                      <>
-                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
-                        <input type="text" value={snapshotClassName} onChange={(e) => setSnapshotClassName(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                        <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
-                          {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
-                            <div key={token} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-                              <span>{token}</span>
-                              <button
-                                type="button"
-                                onClick={() => removeClassToken(token)}
-                                className="rounded px-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground"
-                                title={`Remove ${token}`}
-                                aria-label={`Remove ${token}`}
-                              >
-                                x
-                              </button>
-                            </div>
-                          )) : (
-                            <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
-                          )}
+                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
+                      {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                        <div key={group.key}>
+                          <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {group.options.map((option) => {
+                              const isActive = snapshotClassTokens.includes(option.value)
+                              return (
+                                <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                  {option.label}
+                                </button>
+                              )
+                            })}
+                          </div>
                         </div>
-                      </>
-                    )}
+                      ))}
+                    </div>
 
-                    {inspectorTab === 'style' && (
-                      <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
-                        {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                          <div key={group.key}>
-                            <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                            <div className="flex flex-wrap gap-1">
-                              {group.options.map((option) => {
-                                const isActive = snapshotClassTokens.includes(option.value)
-                                return (
-                                  <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                    {option.label}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {inspectorTab === 'layout' && (
-                      <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
-                        {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                          <div key={group.key}>
-                            <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                            {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
-                              <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
-                                <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {group.options.map((option) => {
-                                    const classToken = `${variant.prefix}${option.value}`
-                                    const isActive = snapshotClassTokens.includes(classToken)
-                                    return (
-                                      <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                        {option.label}
-                                      </button>
-                                    )
-                                  })}
-                                </div>
+                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
+                      {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                        <div key={group.key}>
+                          <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
+                          {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
+                            <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
+                              <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {group.options.map((option) => {
+                                  const classToken = `${variant.prefix}${option.value}`
+                                  const isActive = snapshotClassTokens.includes(classToken)
+                                  return (
+                                    <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                      {option.label}
+                                    </button>
+                                  )
+                                })}
                               </div>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="mt-2 space-y-2 border-t pt-2">

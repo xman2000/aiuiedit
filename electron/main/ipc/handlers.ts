@@ -69,12 +69,14 @@ interface SourceRenderedElementEditPayload {
     src?: string
     alt?: string
     className?: string
+    style?: string
   }
   newAttributes: {
     href?: string
     src?: string
     alt?: string
     className?: string
+    style?: string
   }
 }
 
@@ -1278,7 +1280,7 @@ function replaceFirstAttributeValue(attrs: string, attrName: string, nextValue: 
 function applyAttributeEditInSource(
   sourceCode: string,
   tag: string,
-  attrName: 'href' | 'src' | 'alt' | 'class',
+  attrName: 'href' | 'src' | 'alt' | 'class' | 'style',
   originalValue: string | undefined,
   newValue: string | undefined,
   originalText: string
@@ -2158,11 +2160,12 @@ export function setupIPC() {
       }
     }
 
-    const attrPairs: Array<['href' | 'src' | 'alt' | 'class', string | undefined, string | undefined]> = [
+    const attrPairs: Array<['href' | 'src' | 'alt' | 'class' | 'style', string | undefined, string | undefined]> = [
       ['href', originalAttributes.href, newAttributes.href],
       ['src', originalAttributes.src, newAttributes.src],
       ['alt', originalAttributes.alt, newAttributes.alt],
-      ['class', originalAttributes.className, newAttributes.className]
+      ['class', originalAttributes.className, newAttributes.className],
+      ['style', originalAttributes.style, newAttributes.style]
     ]
 
     for (const [attrName, originalValue, nextValue] of attrPairs) {
