@@ -72,8 +72,6 @@ const RESPONSIVE_GROUP_KEYS = new Set([
   'padding'
 ])
 
-const LAYOUT_GROUP_KEYS = new Set(['display', 'layout', 'direction', 'justify', 'items', 'gap', 'width', 'maxWidth'])
-
 const TAILWIND_CLASS_GROUPS: TailwindClassGroup[] = [
   {
     key: 'display',
@@ -564,6 +562,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [snapshotAlt, setSnapshotAlt] = useState('')
   const [snapshotClassName, setSnapshotClassName] = useState('')
   const [snapshotStyle, setSnapshotStyle] = useState('')
+  const [quickVariant, setQuickVariant] = useState<TailwindVariantPrefix>('')
+  const [quickFilter, setQuickFilter] = useState('')
   const timeoutRef = useRef<number | null>(null)
   const snapshotIframeRef = useRef<HTMLIFrameElement | null>(null)
 
@@ -583,6 +583,11 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
 
   const snapshotClassTokens = useMemo(() => splitClassTokens(snapshotClassName), [snapshotClassName])
   const snapshotStyleMap = useMemo(() => parseInlineStyle(snapshotStyle), [snapshotStyle])
+  const quickFilterLower = quickFilter.trim().toLowerCase()
+  const filteredTailwindGroups = useMemo(() => {
+    if (!quickFilterLower) return TAILWIND_CLASS_GROUPS
+    return TAILWIND_CLASS_GROUPS.filter((group) => group.label.toLowerCase().includes(quickFilterLower))
+  }, [quickFilterLower])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -981,6 +986,96 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                               </>
                             )}
                           </div>
+
+                          <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Classes</p>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
+                            <input
+                              type="text"
+                              value={snapshotClassName}
+                              onChange={(e) => {
+                                const nextClassName = e.target.value
+                                setSnapshotClassName(nextClassName)
+                                postSnapshotAttributeUpdate({ className: nextClassName })
+                              }}
+                              className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                            />
+                            <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
+                              {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
+                                <div key={token} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                                  <span>{token}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeClassToken(token)}
+                                    className="rounded px-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground"
+                                    title={`Remove ${token}`}
+                                    aria-label={`Remove ${token}`}
+                                  >
+                                    x
+                                  </button>
+                                </div>
+                              )) : (
+                                <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/20 p-2">
+                            <p className="col-span-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Typography / Inline CSS</p>
+                            <div>
+                              <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Family</label>
+                              <input
+                                type="text"
+                                value={snapshotStyleMap['font-family'] || ''}
+                                onChange={(e) => applyInlineStyleValue('font-family', e.target.value)}
+                                placeholder="Inter, serif, etc"
+                                className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Size</label>
+                              <input
+                                type="text"
+                                value={snapshotStyleMap['font-size'] || ''}
+                                onChange={(e) => applyInlineStyleValue('font-size', e.target.value)}
+                                placeholder="16px"
+                                className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Weight</label>
+                              <input
+                                type="text"
+                                value={snapshotStyleMap['font-weight'] || ''}
+                                onChange={(e) => applyInlineStyleValue('font-weight', e.target.value)}
+                                placeholder="400 / bold"
+                                className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Line Height</label>
+                              <input
+                                type="text"
+                                value={snapshotStyleMap['line-height'] || ''}
+                                onChange={(e) => applyInlineStyleValue('line-height', e.target.value)}
+                                placeholder="1.5"
+                                className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Inline Style</label>
+                              <textarea
+                                value={snapshotStyle}
+                                onChange={(e) => {
+                                  const nextStyle = e.target.value
+                                  setSnapshotStyle(nextStyle)
+                                  postSnapshotAttributeUpdate({ style: nextStyle })
+                                }}
+                                placeholder="font-family: Inter; font-size: 18px;"
+                                className="h-20 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
+                              />
+                            </div>
+                          </div>
                         </div>
 
                         <div className="mt-2 space-y-2 border-t pt-2">
@@ -1005,137 +1100,58 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                     {snapshotSelection ? (
                       <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
                         <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Classes</p>
-                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Quick Edit</p>
                           <input
                             type="text"
-                            value={snapshotClassName}
-                            onChange={(e) => {
-                              const nextClassName = e.target.value
-                              setSnapshotClassName(nextClassName)
-                              postSnapshotAttributeUpdate({ className: nextClassName })
-                            }}
-                            className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                            value={quickFilter}
+                            onChange={(e) => setQuickFilter(e.target.value)}
+                            placeholder="Filter groups..."
+                            className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
                           />
-                          <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
-                            {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
-                              <div key={token} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-                                <span>{token}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => removeClassToken(token)}
-                                  className="rounded px-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground"
-                                  title={`Remove ${token}`}
-                                  aria-label={`Remove ${token}`}
-                                >
-                                  x
-                                </button>
-                              </div>
-                            )) : (
-                              <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
-                            )}
+                          <div className="flex flex-wrap gap-1 rounded-md border bg-background p-1">
+                            {TAILWIND_VARIANTS.map((variant) => (
+                              <button
+                                key={variant.prefix || 'base'}
+                                type="button"
+                                onClick={() => setQuickVariant(variant.prefix)}
+                                className={quickVariant === variant.prefix
+                                  ? 'rounded border border-primary bg-primary px-2 py-1 text-[10px] text-primary-foreground'
+                                  : 'rounded border bg-background px-2 py-1 text-[10px] text-foreground hover:border-primary/60'}
+                              >
+                                {variant.label}
+                              </button>
+                            ))}
                           </div>
-                        </div>
 
-                        <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/20 p-2">
-                          <p className="col-span-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Typography / Inline CSS</p>
-                          <div>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Family</label>
-                            <input
-                              type="text"
-                              value={snapshotStyleMap['font-family'] || ''}
-                              onChange={(e) => applyInlineStyleValue('font-family', e.target.value)}
-                              placeholder="Inter, serif, etc"
-                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Size</label>
-                            <input
-                              type="text"
-                              value={snapshotStyleMap['font-size'] || ''}
-                              onChange={(e) => applyInlineStyleValue('font-size', e.target.value)}
-                              placeholder="16px"
-                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Weight</label>
-                            <input
-                              type="text"
-                              value={snapshotStyleMap['font-weight'] || ''}
-                              onChange={(e) => applyInlineStyleValue('font-weight', e.target.value)}
-                              placeholder="400 / bold"
-                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Line Height</label>
-                            <input
-                              type="text"
-                              value={snapshotStyleMap['line-height'] || ''}
-                              onChange={(e) => applyInlineStyleValue('line-height', e.target.value)}
-                              placeholder="1.5"
-                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                            />
-                          </div>
-                          <div className="col-span-2">
-                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Inline Style</label>
-                            <textarea
-                              value={snapshotStyle}
-                              onChange={(e) => {
-                                const nextStyle = e.target.value
-                                setSnapshotStyle(nextStyle)
-                                postSnapshotAttributeUpdate({ style: nextStyle })
-                              }}
-                              placeholder="font-family: Inter; font-size: 18px;"
-                              className="h-20 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
-                          {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                            <div key={group.key}>
-                              <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                              <div className="flex flex-wrap gap-1">
-                                {group.options.map((option) => {
-                                  const isActive = snapshotClassTokens.includes(option.value)
-                                  return (
-                                    <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                      {option.label}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
-                          {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                            <div key={group.key}>
-                              <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                              {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
-                                <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
-                                  <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
-                                  <div className="flex flex-wrap gap-1">
-                                    {group.options.map((option) => {
-                                      const classToken = `${variant.prefix}${option.value}`
-                                      const isActive = snapshotClassTokens.includes(classToken)
-                                      return (
-                                        <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                          {option.label}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
+                          {filteredTailwindGroups.map((group) => {
+                            const useVariant = RESPONSIVE_GROUP_KEYS.has(group.key) ? quickVariant : ''
+                            return (
+                              <details key={group.key} className="rounded-md border bg-background" open={group.key === 'layout' || group.key === 'textColor'}>
+                                <summary className="cursor-pointer px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
+                                  {group.label}
+                                  {RESPONSIVE_GROUP_KEYS.has(group.key) ? ` (${useVariant || 'base'})` : ''}
+                                </summary>
+                                <div className="grid grid-cols-2 gap-1 border-t p-2">
+                                  {group.options.map((option) => {
+                                    const classToken = `${useVariant}${option.value}`
+                                    const isActive = snapshotClassTokens.includes(classToken)
+                                    return (
+                                      <button
+                                        key={`${group.key}-${classToken}`}
+                                        type="button"
+                                        onClick={() => applyClassOption(group, option.value, useVariant as TailwindVariantPrefix, isActive)}
+                                        className={isActive
+                                          ? 'rounded border border-primary bg-primary px-2 py-1 text-[10px] text-primary-foreground'
+                                          : 'rounded border bg-background px-2 py-1 text-[10px] text-foreground hover:border-primary/60'}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    )
+                                  })}
                                 </div>
-                              ))}
-                            </div>
-                          ))}
+                              </details>
+                            )
+                          })}
                         </div>
                       </div>
                     ) : (
