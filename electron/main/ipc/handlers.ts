@@ -12,6 +12,7 @@ type SupportedFramework = 'nextjs' | 'react-vite' | 'laravel' | 'unknown'
 
 interface SourceMappingItem {
   nodeId: string
+  pageId: string
   sourcePath: string
   selector: string
   kind: 'element'
@@ -63,6 +64,12 @@ interface ImportedNode {
   name: string
   locked: boolean
   visible: boolean
+}
+
+interface DiscoveredPage {
+  route: string
+  name: string
+  file: string
 }
 
 const TAG_TO_COMPONENT: Record<string, string> = {
@@ -163,6 +170,41 @@ async function findFirstFileInTree(rootDir: string, preferredSuffixes: string[],
   })
 
   return found[0]
+}
+
+function viewNameToBladePath(sourceRoot: string, viewName: string): string {
+  const normalized = viewName.trim().replace(/::/g, '/').replace(/\./g, '/')
+  return join(sourceRoot, 'resources', 'views', `${normalized}.blade.php`)
+}
+
+async function detectLaravelEntryFromRoutes(sourceRoot: string): Promise<string | null> {
+  const routesFile = join(sourceRoot, 'routes', 'web.php')
+  if (!(await pathExists(routesFile))) return null
+
+  const routesContent = await fs.readFile(routesFile, 'utf-8')
+
+  const routeViewMatch = routesContent.match(/Route::view\(\s*['"]\/['"]\s*,\s*['"]([a-zA-Z0-9_\-.:]+)['"]\s*\)/)
+  if (routeViewMatch?.[1]) {
+    const routeViewPath = viewNameToBladePath(sourceRoot, routeViewMatch[1])
+    if (await pathExists(routeViewPath)) return routeViewPath
+  }
+
+  const routeGetInlineViewMatch = routesContent.match(/Route::get\(\s*['"]\/['"]\s*,\s*function\s*\(\s*\)\s*\{[\s\S]*?return\s+view\(\s*['"]([a-zA-Z0-9_\-.:]+)['"]\s*\)/)
+  if (routeGetInlineViewMatch?.[1]) {
+    const inlineViewPath = viewNameToBladePath(sourceRoot, routeGetInlineViewMatch[1])
+    if (await pathExists(inlineViewPath)) return inlineViewPath
+  }
+
+  const routeControllerViewMatch = routesContent.match(/Route::get\(\s*['"]\/['"]\s*,[\s\S]*?->name\(\s*['"][^'"]+['"]\s*\)/)
+  if (routeControllerViewMatch) {
+    const homeFallback = await findFirstFileInTree(sourceRoot, [
+      'resources/views/home.blade.php',
+      'resources/views/welcome.blade.php'
+    ], 6)
+    if (homeFallback) return homeFallback
+  }
+
+  return null
 }
 
 async function detectFramework(sourceRoot: string): Promise<{ framework: SupportedFramework; entryFile: string | null }> {
@@ -273,6 +315,11 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
   ])
 
   if (laravelSignals || laravelEntry) {
+    const routeDerivedEntry = await detectLaravelEntryFromRoutes(sourceRoot)
+    if (routeDerivedEntry) {
+      return { framework: 'laravel', entryFile: routeDerivedEntry }
+    }
+
     if (laravelEntry) {
       return { framework: 'laravel', entryFile: laravelEntry }
     }
@@ -319,7 +366,89 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
   return { framework: 'unknown', entryFile: discoveredGenericEntry }
 }
 
-function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: string): { nodes: ImportedNode[]; mappings: SourceMappingItem[] } {
+function titleFromRoute(route: string): string {
+  if (route === '/') return 'Home'
+  return route
+    .replace(/^\//, '')
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(' ') || 'Page'
+}
+
+async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): Promise<DiscoveredPage[]> {
+  const pages = new Map<string, DiscoveredPage>()
+  const routesFile = join(sourceRoot, 'routes', 'web.php')
+
+  if (await pathExists(routesFile)) {
+    const routesContent = await fs.readFile(routesFile, 'utf-8')
+
+    const routeViewRegex = /Route::view\(\s*['"]([^'"]+)['"]\s*,\s*['"]([a-zA-Z0-9_\-.:]+)['"]\s*\)/g
+    let routeViewMatch: RegExpExecArray | null
+    while ((routeViewMatch = routeViewRegex.exec(routesContent)) !== null) {
+      const route = normalizeRoute(routeViewMatch[1])
+      const viewPath = viewNameToBladePath(sourceRoot, routeViewMatch[2])
+      if (!(await pathExists(viewPath))) continue
+
+      pages.set(route, {
+        route,
+        name: titleFromRoute(route),
+        file: viewPath
+      })
+    }
+
+    const inlineViewRegex = /Route::get\(\s*['"]([^'"]+)['"]\s*,\s*function\s*\(\s*\)\s*\{[\s\S]*?return\s+view\(\s*['"]([a-zA-Z0-9_\-.:]+)['"]\s*\)/g
+    let inlineViewMatch: RegExpExecArray | null
+    while ((inlineViewMatch = inlineViewRegex.exec(routesContent)) !== null) {
+      const route = normalizeRoute(inlineViewMatch[1])
+      const viewPath = viewNameToBladePath(sourceRoot, inlineViewMatch[2])
+      if (!(await pathExists(viewPath))) continue
+
+      pages.set(route, {
+        route,
+        name: titleFromRoute(route),
+        file: viewPath
+      })
+    }
+  }
+
+  if (pages.size === 0) {
+    const bladePaths = await findFirstFileInTree(sourceRoot, ['resources/views/welcome.blade.php', '.blade.php'], 6)
+    if (bladePaths) {
+      pages.set('/', {
+        route: '/',
+        name: 'Home',
+        file: bladePaths
+      })
+    }
+  }
+
+  if (pages.size === 0) {
+    pages.set('/', {
+      route: '/',
+      name: 'Home',
+      file: fallbackEntry
+    })
+  }
+
+  return Array.from(pages.values()).sort((a, b) => a.route.localeCompare(b.route))
+}
+
+async function discoverSourcePages(sourceRoot: string, framework: SupportedFramework, entryFile: string): Promise<DiscoveredPage[]> {
+  if (framework === 'laravel') {
+    return discoverLaravelPages(sourceRoot, entryFile)
+  }
+
+  return [
+    {
+      route: '/',
+      name: 'Home',
+      file: entryFile
+    }
+  ]
+}
+
+function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: string, pageId: string): { nodes: ImportedNode[]; mappings: SourceMappingItem[] } {
   const elementRegex = /<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>([\s\S]*?)<\/\1>|<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)\/>/g
   const nodes: ImportedNode[] = []
   const mappings: SourceMappingItem[] = []
@@ -341,7 +470,7 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     const node: ImportedNode = {
       id: nodeId,
       type: componentType,
-      pageId: 'page-1',
+      pageId,
       parentId: null,
       position: { x: 48, y },
       size: {
@@ -395,6 +524,7 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
 
     mappings.push({
       nodeId,
+      pageId,
       sourcePath: relative(sourceRoot, sourcePath),
       selector: `${tag}:nth-of-type(${currentTagCount})`,
       kind: 'element'
@@ -589,8 +719,21 @@ export function setupIPC() {
       throw new Error('Selected entry file must be inside the selected source directory')
     }
 
-    const sourceCode = await fs.readFile(entryFile, 'utf-8')
-    const { nodes, mappings } = buildImportedNodes(sourceCode, entryFile, sourceRoot)
+    const discoveredPages = await discoverSourcePages(sourceRoot, framework, entryFile)
+    const pagesWithIds = discoveredPages.map((page, index) => ({
+      ...page,
+      id: `page-${index + 1}`
+    }))
+
+    const nodes: ImportedNode[] = []
+    const mappings: SourceMappingItem[] = []
+
+    for (const page of pagesWithIds) {
+      const pageSource = await fs.readFile(page.file, 'utf-8')
+      const imported = buildImportedNodes(pageSource, page.file, sourceRoot, page.id)
+      nodes.push(...imported.nodes)
+      mappings.push(...imported.mappings)
+    }
 
     const sourceName = sanitizeProjectName(basename(sourceRoot))
     const projectName = `${sourceName}-import`
@@ -615,18 +758,16 @@ export function setupIPC() {
       name: projectName,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      pages: [
-        {
-          id: 'page-1',
-          name: 'Imported Page',
-          route: '/',
-          title: 'Imported Page',
-          description: '',
-          template: 'default',
-          noIndex: false,
-          authRequired: false
-        }
-      ],
+      pages: pagesWithIds.map((page) => ({
+        id: page.id,
+        name: page.name,
+        route: page.route,
+        title: page.name,
+        description: '',
+        template: 'default',
+        noIndex: false,
+        authRequired: false
+      })),
       designSystem: {
         colors: {
           primary: { name: 'Primary', value: '#3B82F6' },
@@ -645,12 +786,15 @@ export function setupIPC() {
         framework,
         entryFile: entryRelative,
         roundTrip: true,
-        pages: {
-          'page-1': {
-            file: entryRelative,
-            route: '/'
-          }
-        }
+        pages: Object.fromEntries(
+          pagesWithIds.map((page) => [
+            page.id,
+            {
+              file: relative(sourceRoot, page.file),
+              route: page.route
+            }
+          ])
+        )
       }
     }
 
@@ -1070,9 +1214,25 @@ export function setupIPC() {
     }
 
     const sourceRoot = project.source.root as string
-    const entryFile = join(sourceRoot, project.source.entryFile as string)
-    const sourceCode = await fs.readFile(entryFile, 'utf-8')
-    const built = buildImportedNodes(sourceCode, entryFile, sourceRoot)
+    const sourcePages: Record<string, { file: string; route: string }> = project.source.pages || {
+      'page-1': {
+        file: project.source.entryFile,
+        route: '/'
+      }
+    }
+
+    const nodes: ImportedNode[] = []
+    const mappings: SourceMappingItem[] = []
+
+    for (const [pageId, pageSource] of Object.entries(sourcePages)) {
+      const absolutePath = join(sourceRoot, pageSource.file)
+      if (!(await pathExists(absolutePath))) continue
+
+      const sourceCode = await fs.readFile(absolutePath, 'utf-8')
+      const builtPage = buildImportedNodes(sourceCode, absolutePath, sourceRoot, pageId)
+      nodes.push(...builtPage.nodes)
+      mappings.push(...builtPage.mappings)
+    }
 
     const manifest: SourceMappingManifest = {
       version: 1,
@@ -1080,11 +1240,11 @@ export function setupIPC() {
       sourceRoot,
       entryFile: project.source.entryFile,
       generatedAt: new Date().toISOString(),
-      mappings: built.mappings
+      mappings
     }
 
     const canvas = {
-      nodes: built.nodes,
+      nodes,
       selectedIds: [],
       zoom: 1,
       viewport: { x: 0, y: 0 }

@@ -9,6 +9,20 @@ export function PagesPanel() {
   const [isAdding, setIsAdding] = useState(false)
   const [newPageName, setNewPageName] = useState('')
 
+  const pageSourceMap = currentProject?.source?.pages || {}
+  const hasSourceTree = Object.keys(pageSourceMap).length > 0
+  const sourceGroups = Object.entries(
+    currentProject?.pages.reduce((acc, page) => {
+      const sourceFile = pageSourceMap[page.id]?.file || ''
+      const directory = sourceFile.includes('/') ? sourceFile.slice(0, sourceFile.lastIndexOf('/')) : '(root)'
+      if (!acc[directory]) {
+        acc[directory] = []
+      }
+      acc[directory].push(page)
+      return acc
+    }, {} as Record<string, Page[]>) || {}
+  ).sort((a, b) => a[0].localeCompare(b[0]))
+
   if (!currentProject) {
     return (
       <div className="flex h-full items-center justify-center p-4 text-center">
@@ -96,43 +110,90 @@ export function PagesPanel() {
 
       {/* Pages List */}
       <div className="flex-1 overflow-auto p-2">
-        <div className="space-y-1">
-          {currentProject.pages.map((page) => (
-            <div
-              key={page.id}
-              onClick={() => setCurrentPage(page)}
-              className={`group flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer transition-colors ${
-                currentPage?.id === page.id
-                  ? 'bg-primary/10 text-primary'
-                  : 'hover:bg-muted'
-              }`}
-            >
-              <FileText className="h-4 w-4 flex-shrink-0" />
-              
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{page.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{page.route}</p>
+        {hasSourceTree ? (
+          <div className="space-y-3">
+            {sourceGroups.map(([group, pages]) => (
+              <div key={group}>
+                <div className="mb-1 rounded-md bg-muted px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group}
+                </div>
+                <div className="space-y-1">
+                  {pages.map((page) => (
+                    <div
+                      key={page.id}
+                      onClick={() => setCurrentPage(page)}
+                      className={`group flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer transition-colors ${
+                        currentPage?.id === page.id
+                          ? 'bg-primary/10 text-primary'
+                          : 'hover:bg-muted'
+                      }`}
+                    >
+                      <FileText className="h-4 w-4 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{page.name}</p>
+                        <p className="text-xs text-muted-foreground truncate">{page.route}</p>
+                      </div>
+
+                      {currentPage?.id === page.id && (
+                        <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                      )}
+
+                      <Button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRemovePage(page.id)
+                        }}
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                        title="Delete page"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
               </div>
-
-              {currentPage?.id === page.id && (
-                <ChevronRight className="h-4 w-4 flex-shrink-0" />
-              )}
-
-              <Button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleRemovePage(page.id)
-                }}
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-                title="Delete page"
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-1">
+            {currentProject.pages.map((page) => (
+              <div
+                key={page.id}
+                onClick={() => setCurrentPage(page)}
+                className={`group flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer transition-colors ${
+                  currentPage?.id === page.id
+                    ? 'bg-primary/10 text-primary'
+                    : 'hover:bg-muted'
+                }`}
               >
-                <Trash2 className="h-3 w-3" />
-              </Button>
-            </div>
-          ))}
-        </div>
+                <FileText className="h-4 w-4 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{page.name}</p>
+                  <p className="text-xs text-muted-foreground truncate">{page.route}</p>
+                </div>
+
+                {currentPage?.id === page.id && (
+                  <ChevronRight className="h-4 w-4 flex-shrink-0" />
+                )}
+
+                <Button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleRemovePage(page.id)
+                  }}
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                  title="Delete page"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Add Page */}
