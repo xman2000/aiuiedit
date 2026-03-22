@@ -6,7 +6,6 @@ import { DesignSystemPanel } from '@/components/panels/DesignSystemPanel'
 import { PagesPanel } from '@/components/panels/PagesPanel'
 import { SettingsPanel } from '@/components/panels/SettingsPanel'
 import { Canvas } from '@/components/canvas/engine/Canvas'
-import { PropertiesPanel } from '@/components/panels/PropertiesPanel'
 import { ChatPanel } from '@/components/panels/ChatPanel'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useCanvasStore } from '@/store/useCanvasStore'
@@ -99,17 +98,8 @@ export function MainLayout() {
             <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50" />
 
             {/* Canvas */}
-            <Panel defaultSize={55} minSize={30}>
+            <Panel defaultSize={80} minSize={50}>
               <Canvas />
-            </Panel>
-
-            <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50" />
-
-            {/* Right Sidebar */}
-            <Panel defaultSize={25} minSize={20} maxSize={35}>
-              <div className="flex h-full flex-col border-l bg-card">
-                <PropertiesPanel />
-              </div>
             </Panel>
           </PanelGroup>
         ) : (
