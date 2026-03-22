@@ -148,6 +148,27 @@ function extractTextContent(markup: string): string {
   return markup.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }
 
+function sanitizeBladeText(markup: string): string {
+  return markup
+    .replace(/<\?php[\s\S]*?\?>/g, ' ')
+    .replace(/\{\{[\s\S]*?\}\}/g, ' ')
+    .replace(/\{!![\s\S]*?!!\}/g, ' ')
+    .replace(/@[a-zA-Z_][a-zA-Z0-9_]*(?:\([^)]*\))?/g, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function collectFallbackTextChunks(sourceCode: string): string[] {
+  const lines = sourceCode
+    .split(/\r?\n/)
+    .map((line) => sanitizeBladeText(line))
+    .filter((line) => line.length >= 14)
+
+  const unique = Array.from(new Set(lines))
+  return unique.slice(0, 8)
+}
+
 function parseAttr(block: string, attr: string): string {
   const match = block.match(new RegExp(`${attr}\\s*=\\s*["']([^"']+)["']`, 'i'))
   return match?.[1] || ''
@@ -787,6 +808,7 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
   const elementRegex = /<([a-zA-Z][a-zA-Z0-9:._-]*)\b([^>]*)>([\s\S]*?)<\/\1>|<([a-zA-Z][a-zA-Z0-9:._-]*)\b([^>]*)\/>/g
   const nodes: ImportedNode[] = []
   const mappings: SourceMappingItem[] = []
+  const sourcePathRelative = relative(sourceRoot, sourcePath)
   let match: RegExpExecArray | null
   let index = 0
   const perTagCount = new Map<string, number>()
@@ -801,8 +823,13 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     const componentType = TAG_TO_COMPONENT[tag] || (isBladeComponentTag ? 'card' : undefined)
     if (!componentType) continue
 
+    const rawText = extractTextContent(innerHtml)
+    const text = sanitizeBladeText(rawText)
+
+    if (componentType === 'text' && text.length < 3) continue
+    if (componentType === 'heading' && text.length < 2) continue
+
     const nodeId = makeNodeId('node')
-    const text = extractTextContent(innerHtml)
     const y = 24 + Math.floor(index / 2) * 86
     const x = 24 + (index % 2) * 400
 
@@ -821,7 +848,7 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
       },
       props: {},
       children: [],
-      name: tag.startsWith('x-') ? tag : componentType[0].toUpperCase() + componentType.slice(1),
+      name: isBladeComponentTag ? tag : componentType[0].toUpperCase() + componentType.slice(1),
       locked: false,
       visible: true
     }
@@ -829,8 +856,16 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     if (componentType === 'heading') {
       node.props.text = text || 'Heading'
       node.props.level = Number(tag.replace('h', '')) || 2
+      node.style = {
+        ...node.style,
+        color: '#111827'
+      }
     } else if (componentType === 'text') {
       node.props.content = text || 'Text'
+      node.style = {
+        ...node.style,
+        color: '#374151'
+      }
     } else if (componentType === 'button') {
       node.props.text = text || 'Button'
     } else if (componentType === 'input') {
@@ -853,13 +888,15 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
       node.props.links = 'Home,About,Contact'
       node.size = { width: 800, height: 56 }
     } else if (componentType === 'card') {
-      node.props.title = isBladeComponentTag ? tag : (text || 'Card')
+      const cardTitle = isBladeComponentTag ? tag : (text || 'Card')
+      node.props.title = cardTitle
       node.size = { width: 420, height: 160 }
       node.style = {
         ...node.style,
         border: '1px solid #D1D5DB',
         borderRadius: '10px',
         backgroundColor: '#FFFFFF',
+        color: '#111827',
         padding: '12px'
       }
     } else if (componentType === 'container') {
@@ -877,33 +914,62 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     mappings.push({
       nodeId,
       pageId,
-      sourcePath: relative(sourceRoot, sourcePath),
+      sourcePath: sourcePathRelative,
       selector: `${tag}:nth-of-type(${currentTagCount})`,
       kind: 'element'
     })
-    index += 1
 
+    index += 1
     if (nodes.length >= 100) break
+  }
+
+  if (nodes.length <= 2) {
+    const fallbackChunks = collectFallbackTextChunks(sourceCode)
+    fallbackChunks.forEach((chunk, chunkIndex) => {
+      if (nodes.length >= 100) return
+      const nodeId = makeNodeId('node')
+      nodes.push({
+        id: nodeId,
+        type: chunkIndex === 0 ? 'heading' : 'text',
+        pageId,
+        parentId: null,
+        position: { x: 32, y: 36 + chunkIndex * 72 },
+        size: { width: 680, height: chunkIndex === 0 ? 56 : 52 },
+        style: {
+          boxSizing: 'border-box',
+          color: '#111827',
+          fontSize: chunkIndex === 0 ? '22px' : '15px',
+          fontWeight: chunkIndex === 0 ? '700' : '400',
+          lineHeight: '1.5'
+        },
+        props: chunkIndex === 0
+          ? { text: chunk.slice(0, 90), level: 2 }
+          : { content: chunk.slice(0, 180) },
+        children: [],
+        name: chunkIndex === 0 ? 'Imported Heading' : 'Imported Text',
+        locked: false,
+        visible: true
+      })
+    })
   }
 
   if (nodes.length === 0) {
     const fallbackNodeId = makeNodeId('node')
-    const sourceLabel = relative(sourceRoot, sourcePath)
     nodes.push({
       id: fallbackNodeId,
       type: 'heading',
       pageId,
       parentId: null,
       position: { x: 32, y: 36 },
-      size: { width: 520, height: 58 },
+      size: { width: 620, height: 58 },
       style: {
         boxSizing: 'border-box',
         fontSize: '22px',
         fontWeight: '700',
-        color: '#1F2937'
+        color: '#111827'
       },
       props: {
-        text: `Imported: ${sourceLabel}`,
+        text: `Imported: ${sourcePathRelative}`,
         level: 2
       },
       children: [],
@@ -911,7 +977,6 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
       locked: false,
       visible: true
     })
-
   }
 
   return { nodes, mappings }
