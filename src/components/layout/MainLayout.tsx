@@ -13,7 +13,7 @@ import { useCanvasStore } from '@/store/useCanvasStore'
 import { useAppStore } from '@/store/useAppStore'
 import { useKeyboardShortcuts } from '@/utils/shortcuts'
 import { Button } from '@/components/common/Button'
-import { FolderUp, Plus } from 'lucide-react'
+import { FolderOpen, FolderUp, Plus } from 'lucide-react'
 import { createCanvasNode } from '@/core/canvasNodeFactory'
 import type { CanvasNode } from '@/types'
 
@@ -261,77 +261,73 @@ function EmptyState() {
 
   return (
     <div className="flex h-full flex-col items-center justify-center p-8">
-      <div className="text-center max-w-md">
-        <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
-          <Plus className="h-10 w-10 text-primary" />
-        </div>
-        
-        <h2 className="mb-2 text-2xl font-bold">No Project Open</h2>
-        
-        {!workspace ? (
-          <>
-            <p className="mb-4 text-muted-foreground">
-              You need to set up a workspace directory first. This is where all your projects will be stored.
+      <div className="w-full max-w-xl rounded-xl border bg-card p-6 shadow-sm">
+        <div className="mb-6 text-center">
+          <div className="mb-4 inline-flex h-14 w-14 items-center justify-center rounded-xl bg-primary/10">
+            <FolderOpen className="h-7 w-7 text-primary" />
+          </div>
+          <h2 className="mb-2 text-2xl font-bold">Start a Project</h2>
+          {!workspace ? (
+            <p className="text-sm text-muted-foreground">
+              Choose a workspace folder to store and discover your aiuiedit projects.
             </p>
-            <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 mb-4">
-              <p className="text-sm text-yellow-700 dark:text-yellow-400">
-                <strong>No workspace configured.</strong><br/>
-                Please restart the app and complete the welcome wizard, or set a workspace in Settings.
-              </p>
-            </div>
-            <Button variant="outline" onClick={handleChangeWorkspace} size="lg" className="w-full mb-3">
-              Choose Workspace Folder
-            </Button>
-          </>
-        ) : (
-          <p className="mb-6 text-muted-foreground">
-            Create a new project in <code className="text-xs bg-muted px-1 py-0.5 rounded">{workspace}</code>
-          </p>
-        )}
+          ) : (
+            <p className="text-sm text-muted-foreground break-all">
+              Workspace: <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{workspace}</code>
+            </p>
+          )}
+        </div>
 
-        <Button 
-          onClick={handleCreateProject}
-          disabled={isCreating || !workspace}
-          size="lg"
-        >
-          <Plus className="mr-2 h-5 w-5" />
-          {isCreating ? 'Creating...' : 'Create New Project'}
-        </Button>
+        <div className="space-y-2">
+          <Button
+            onClick={handleCreateProject}
+            disabled={isCreating || !workspace}
+            size="lg"
+            className="w-full"
+          >
+            <Plus className="mr-2 h-5 w-5" />
+            {isCreating ? 'Creating Project...' : 'Create New Project'}
+          </Button>
 
-        <Button
-          variant="outline"
-          onClick={handleImportProject}
-          disabled={isImporting}
-          size="lg"
-          className="mt-3"
-        >
-          <FolderUp className="mr-2 h-5 w-5" />
-          {isImporting ? 'Importing...' : 'Import Existing Website'}
-        </Button>
+          <Button
+            variant="outline"
+            onClick={handleImportProject}
+            disabled={isImporting || !workspace}
+            size="lg"
+            className="w-full"
+          >
+            <FolderUp className="mr-2 h-5 w-5" />
+            {isImporting ? 'Importing Website...' : 'Import Existing Website'}
+          </Button>
 
-        <Button
-          variant="ghost"
-          onClick={handleChangeWorkspace}
-          size="sm"
-          className="mt-2"
-        >
-          Change Workspace Folder
-        </Button>
+          <Button
+            variant="outline"
+            onClick={handleChangeWorkspace}
+            size="lg"
+            className="w-full"
+          >
+            <FolderOpen className="mr-2 h-5 w-5" />
+            {workspace ? 'Change Workspace Folder' : 'Choose Workspace Folder'}
+          </Button>
+        </div>
 
         {existingProjects.length > 0 && (
-          <div className="mt-6 text-left">
+          <div className="mt-6 border-t pt-4">
             <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Recent Projects</p>
             <div className="space-y-2">
               {existingProjects.slice(0, 5).map((project) => (
-                <button
+                <Button
                   key={project.id}
+                  variant="outline"
                   onClick={() => handleOpenProject(project.path)}
                   disabled={isOpening}
-                  className="w-full rounded-lg border px-3 py-2 text-left transition-colors hover:bg-muted disabled:opacity-60"
+                  className="h-auto w-full justify-start px-3 py-2"
                 >
-                  <div className="text-sm font-medium">{project.name}</div>
-                  <div className="text-xs text-muted-foreground break-all">{project.path}</div>
-                </button>
+                  <div className="text-left">
+                    <div className="text-sm font-medium text-foreground">{project.name}</div>
+                    <div className="text-xs text-muted-foreground break-all">{project.path}</div>
+                  </div>
+                </Button>
               ))}
             </div>
           </div>

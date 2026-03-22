@@ -88,17 +88,19 @@ export function SettingsPanel() {
                   placeholder="sk-or-v1-..."
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm pr-10 outline-none focus:border-primary"
                 />
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  className="absolute right-1 top-1/2 h-8 w-8 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   {showApiKey ? (
                     <EyeOff className="h-4 w-4" />
                   ) : (
                     <Eye className="h-4 w-4" />
                   )}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -140,11 +142,7 @@ export function SettingsPanel() {
 
       {/* Save Button */}
       <div className="border-t p-4">
-        <Button 
-          onClick={handleSave}
-          disabled={isSaving}
-          className="w-full"
-        >
+        <Button onClick={handleSave} disabled={isSaving} className="w-full">
           <Save className="mr-2 h-4 w-4" />
           {isSaving ? 'Saving...' : 'Save Settings'}
         </Button>

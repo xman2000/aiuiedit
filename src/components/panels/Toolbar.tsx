@@ -160,123 +160,116 @@ export function Toolbar() {
       </div>
 
       {/* Center: Actions */}
-      <div className="flex items-center gap-2">
-        <Button 
-          variant="ghost" 
-          size="icon"
-          onClick={handleSave}
-          disabled={!currentProject}
-        >
-          <Save className="h-4 w-4" />
-        </Button>
-
-        {currentProject?.source?.roundTrip && (
+      <div className="flex items-center gap-2 overflow-x-auto py-1">
+        <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1 py-1">
           <Button
             variant="ghost"
-            size="icon"
-            onClick={handleRefreshFromSource}
-            title="Refresh from source"
+            size="sm"
+            onClick={handleSave}
+            disabled={!currentProject}
           >
-            <RefreshCcw className="h-4 w-4" />
+            <Save className="mr-1 h-4 w-4" />
+            Save
           </Button>
-        )}
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => handleExport('html')}
-          disabled={!currentProject}
-          title="Export HTML"
-        >
-          <FileText className="h-4 w-4" />
-        </Button>
+          {currentProject?.source?.roundTrip && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefreshFromSource}
+              title="Refresh from source"
+            >
+              <RefreshCcw className="mr-1 h-4 w-4" />
+              Refresh
+            </Button>
+          )}
+        </div>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => handleExport('react')}
-          disabled={!currentProject}
-          title="Export React (TSX)"
-        >
-          <FileCode className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1 py-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleExport('html')}
+            disabled={!currentProject}
+            title="Export HTML"
+          >
+            <FileText className="mr-1 h-4 w-4" />
+            HTML
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleExport('react')}
+            disabled={!currentProject}
+            title="Export React (TSX)"
+          >
+            <FileCode className="mr-1 h-4 w-4" />
+            React
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => handleExport('vue')}
+            disabled={!currentProject}
+            title="Export Vue (.vue)"
+          >
+            Vue
+          </Button>
+        </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => handleExport('vue')}
-          disabled={!currentProject}
-          title="Export Vue (.vue)"
-        >
-          Vue
-        </Button>
+        <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1 py-1">
+          <Button variant="ghost" size="sm" disabled={selectedCount < 2} onClick={handleGroup} title="Group selected">
+            <Group className="mr-1 h-4 w-4" />
+            Group
+          </Button>
+          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={handleUngroup} title="Ungroup selected groups">
+            <Ungroup className="mr-1 h-4 w-4" />
+            Ungroup
+          </Button>
+          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={handleToggleLock} title="Toggle lock">
+            {hasUnlockedSelected ? <Lock className="mr-1 h-4 w-4" /> : <Unlock className="mr-1 h-4 w-4" />}
+            {hasUnlockedSelected ? 'Lock' : 'Unlock'}
+          </Button>
+          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={handleToggleVisibility} title="Toggle visibility">
+            {hasHiddenSelected ? <Eye className="mr-1 h-4 w-4" /> : <EyeOff className="mr-1 h-4 w-4" />}
+            {hasHiddenSelected ? 'Show' : 'Hide'}
+          </Button>
+        </div>
 
-        <div className="h-4 w-px bg-border" />
-
-        <Button variant="ghost" size="sm" disabled={selectedCount < 2} onClick={handleGroup} title="Group selected">
-          <Group className="h-4 w-4 mr-1" />
-          Group
-        </Button>
-
-        <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={handleUngroup} title="Ungroup selected groups">
-          <Ungroup className="h-4 w-4 mr-1" />
-          Ungroup
-        </Button>
-
-        <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={handleToggleLock} title="Toggle lock">
-          {hasUnlockedSelected ? <Lock className="h-4 w-4 mr-1" /> : <Unlock className="h-4 w-4 mr-1" />}
-          {hasUnlockedSelected ? 'Lock' : 'Unlock'}
-        </Button>
-
-        <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={handleToggleVisibility} title="Toggle visibility">
-          {hasHiddenSelected ? <Eye className="h-4 w-4 mr-1" /> : <EyeOff className="h-4 w-4 mr-1" />}
-          {hasHiddenSelected ? 'Show' : 'Hide'}
-        </Button>
-
-        <div className="h-4 w-px bg-border" />
-
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1 py-1">
           <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('left')} title="Align Left">L</Button>
           <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('center')} title="Align Center">C</Button>
           <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('right')} title="Align Right">R</Button>
           <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('top')} title="Align Top">T</Button>
           <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('middle')} title="Align Middle">M</Button>
           <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('bottom')} title="Align Bottom">B</Button>
+          <Button variant="ghost" size="sm" disabled={selectedCount < 3} onClick={() => handleDistribute('horizontal')} title="Distribute Horizontally">Dist H</Button>
+          <Button variant="ghost" size="sm" disabled={selectedCount < 3} onClick={() => handleDistribute('vertical')} title="Distribute Vertically">Dist V</Button>
         </div>
-
-        <div className="h-4 w-px bg-border" />
-
-        <Button variant="ghost" size="sm" disabled={selectedCount < 3} onClick={() => handleDistribute('horizontal')} title="Distribute Horizontally">
-          Dist H
-        </Button>
-
-        <Button variant="ghost" size="sm" disabled={selectedCount < 3} onClick={() => handleDistribute('vertical')} title="Distribute Vertically">
-          Dist V
-        </Button>
 
         {selectedCount > 0 && (
           <span className="text-xs text-muted-foreground">{selectedCount} selected</span>
         )}
-        
-        <Button variant="ghost" size="icon" disabled={!canUndo} onClick={undo}>
-          <Undo className="h-4 w-4" />
-        </Button>
-        
-        <Button variant="ghost" size="icon" disabled={!canRedo} onClick={redo}>
-          <Redo className="h-4 w-4" />
-        </Button>
-        
-        <div className="h-4 w-px bg-border" />
-        
-        <Button variant="ghost" size="icon" onClick={() => setZoom(Math.max(0.1, zoom - 0.1))}>
-          <ZoomOut className="h-4 w-4" />
-        </Button>
-        
-        <span className="min-w-[3rem] text-center text-xs text-muted-foreground">{Math.round(zoom * 100)}%</span>
-        
-        <Button variant="ghost" size="icon" onClick={() => setZoom(Math.min(5, zoom + 0.1))}>
-          <ZoomIn className="h-4 w-4" />
-        </Button>
+
+        <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1 py-1">
+          <Button variant="ghost" size="icon" disabled={!canUndo} onClick={undo}>
+            <Undo className="h-4 w-4" />
+          </Button>
+
+          <Button variant="ghost" size="icon" disabled={!canRedo} onClick={redo}>
+            <Redo className="h-4 w-4" />
+          </Button>
+
+          <Button variant="ghost" size="icon" onClick={() => setZoom(Math.max(0.1, zoom - 0.1))}>
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+
+          <span className="min-w-[3rem] text-center text-xs text-muted-foreground">{Math.round(zoom * 100)}%</span>
+
+          <Button variant="ghost" size="icon" onClick={() => setZoom(Math.min(5, zoom + 0.1))}>
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Right: Theme and Settings */}

@@ -117,16 +117,18 @@ export function PagesPanel() {
                 <ChevronRight className="h-4 w-4 flex-shrink-0" />
               )}
 
-              <button
+              <Button
                 onClick={(e) => {
                   e.stopPropagation()
                   handleRemovePage(page.id)
                 }}
-                className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 hover:text-destructive transition-opacity"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 opacity-0 group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
                 title="Delete page"
               >
                 <Trash2 className="h-3 w-3" />
-              </button>
+              </Button>
             </div>
           ))}
         </div>
@@ -261,23 +263,25 @@ export function PagesPanel() {
             </select>
           </div>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={Boolean(currentPage.noIndex)}
-              onChange={(e) => handlePageChange('noIndex', e.target.checked)}
-            />
-            No-index (exclude from search engines)
-          </label>
+          <div className="grid grid-cols-1 gap-2">
+            <label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(currentPage.noIndex)}
+                onChange={(e) => handlePageChange('noIndex', e.target.checked)}
+              />
+              No-index (exclude from search engines)
+            </label>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={Boolean(currentPage.authRequired)}
-              onChange={(e) => handlePageChange('authRequired', e.target.checked)}
-            />
-            Authentication required
-          </label>
+            <label className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                checked={Boolean(currentPage.authRequired)}
+                onChange={(e) => handlePageChange('authRequired', e.target.checked)}
+              />
+              Authentication required
+            </label>
+          </div>
         </div>
       )}
     </div>
