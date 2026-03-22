@@ -19,8 +19,8 @@ export function getMainWindow(): BrowserWindow | null {
 function createWindow() {
   // Determine preload path based on environment
   const preloadPath = process.env.VITE_DEV_SERVER_URL
-    ? join(__dirname, '../preload/index.js')  // Dev mode
-    : join(__dirname, '../preload/index.js')  // Production
+    ? join(__dirname, '../preload/index.cjs')  // Dev mode
+    : join(__dirname, '../preload/index.cjs')  // Production
 
   console.log('Loading preload script from:', preloadPath)
   console.log('__dirname:', __dirname)
