@@ -20,6 +20,10 @@ export function Canvas() {
     addNode
   } = useCanvasStore()
   const { currentProject, currentPage, setDirty } = useProjectStore()
+
+  const currentPageNodes = currentPage
+    ? Array.from(nodes.values()).filter((node) => node.visible && (node.pageId || currentPage.id) === currentPage.id)
+    : []
   
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
@@ -99,10 +103,10 @@ export function Canvas() {
       <div className="absolute top-0 left-0 right-0 h-10 bg-card border-b flex items-center justify-between px-4 z-10">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Page:</span>
-          <span className="text-sm text-muted-foreground">{currentProject?.pages[0]?.name || 'Home'}</span>
+          <span className="text-sm text-muted-foreground">{currentPage?.name || currentProject?.pages[0]?.name || 'Home'}</span>
         </div>
         <div className="text-xs text-muted-foreground">
-          {nodes.size} element{nodes.size !== 1 ? 's' : ''}
+          {currentPageNodes.length} element{currentPageNodes.length !== 1 ? 's' : ''}
         </div>
       </div>
       
@@ -150,13 +154,12 @@ export function Canvas() {
           >
             {/* Page Label */}
             <div className="absolute -top-6 left-0 text-xs text-muted-foreground font-medium">
-              Page: {currentProject?.pages[0]?.name || 'Home'} (1200×800)
+              Page: {currentPage?.name || currentProject?.pages[0]?.name || 'Home'} (1200×800)
             </div>
             
             {/* Render Nodes - Inside Page Frame */}
             <div className="relative w-full h-full overflow-hidden">
-              {Array.from(nodes.values()).map(node => (
-                node.visible && currentPage && (node.pageId || currentPage.id) === currentPage.id ? (
+              {currentPageNodes.map(node => (
                 <CanvasNodeComponent
                   key={node.id}
                   node={node}
@@ -164,11 +167,10 @@ export function Canvas() {
                   onSelect={handleNodeSelect(node.id)}
                   scale={zoom}
                 />
-                ) : null
               ))}
 
               {/* Empty State - Inside Page Frame */}
-              {nodes.size === 0 && (
+              {currentPageNodes.length === 0 && (
                 <EmptyCanvas onAddNode={handleAddNode} />
               )}
             </div>

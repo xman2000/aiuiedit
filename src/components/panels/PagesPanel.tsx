@@ -122,16 +122,19 @@ export function PagesPanel() {
                     <div
                       key={page.id}
                       onClick={() => setCurrentPage(page)}
-                      className={`group flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer transition-colors ${
+                      className={`group flex items-center gap-2 rounded-md border-l-2 px-3 py-2 cursor-pointer transition-colors ${
                         currentPage?.id === page.id
-                          ? 'bg-primary/10 text-primary'
-                          : 'hover:bg-muted'
+                          ? 'bg-primary/10 text-primary border-l-primary'
+                          : 'border-l-transparent hover:bg-muted'
                       }`}
                     >
                       <FileText className="h-4 w-4 flex-shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{page.name}</p>
                         <p className="text-xs text-muted-foreground truncate">{page.route}</p>
+                        {pageSourceMap[page.id]?.file && (
+                          <p className="text-[11px] text-muted-foreground/80 truncate">{pageSourceMap[page.id]?.file}</p>
+                        )}
                       </div>
 
                       {currentPage?.id === page.id && (
@@ -162,10 +165,10 @@ export function PagesPanel() {
               <div
                 key={page.id}
                 onClick={() => setCurrentPage(page)}
-                className={`group flex items-center gap-2 rounded-md px-3 py-2 cursor-pointer transition-colors ${
+                className={`group flex items-center gap-2 rounded-md border-l-2 px-3 py-2 cursor-pointer transition-colors ${
                   currentPage?.id === page.id
-                    ? 'bg-primary/10 text-primary'
-                    : 'hover:bg-muted'
+                    ? 'bg-primary/10 text-primary border-l-primary'
+                    : 'border-l-transparent hover:bg-muted'
                 }`}
               >
                 <FileText className="h-4 w-4 flex-shrink-0" />
