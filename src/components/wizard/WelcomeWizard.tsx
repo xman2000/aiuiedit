@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/useAppStore'
 import { Button } from '@/components/common/Button'
 import { Folder, Settings, ArrowRight, Check } from 'lucide-react'
@@ -7,10 +7,35 @@ export function WelcomeWizard() {
   const [step, setStep] = useState(1)
   const [workspacePath, setWorkspacePath] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [electronReady, setElectronReady] = useState(false)
   const { setSettings, setWelcomeOpen } = useAppStore()
+
+  useEffect(() => {
+    // Check if electron API is available
+    if (typeof window !== 'undefined' && window.electron) {
+      setElectronReady(true)
+      console.log('Electron API is ready')
+    } else {
+      console.error('Electron API not available')
+      // Try again after a short delay
+      const timer = setTimeout(() => {
+        if (typeof window !== 'undefined' && window.electron) {
+          setElectronReady(true)
+          console.log('Electron API is ready (delayed)')
+        }
+      }, 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [])
 
   const handleSelectDirectory = async () => {
     console.log('Select directory clicked')
+    
+    if (!window.electron) {
+      alert('Electron API not available. Please restart the application.')
+      return
+    }
+    
     try {
       const path = await window.electron.selectDirectory()
       console.log('Selected path:', path)
@@ -26,6 +51,11 @@ export function WelcomeWizard() {
   const handleComplete = async () => {
     if (!workspacePath) return
     
+    if (!window.electron) {
+      alert('Electron API not available. Please restart the application.')
+      return
+    }
+    
     setIsLoading(true)
     try {
       await window.electron.saveSettings({
@@ -40,6 +70,7 @@ export function WelcomeWizard() {
       setWelcomeOpen(false)
     } catch (error) {
       console.error('Failed to save settings:', error)
+      alert('Error saving settings: ' + error)
     } finally {
       setIsLoading(false)
     }
@@ -65,6 +96,14 @@ export function WelcomeWizard() {
           <div className={`h-2 w-16 rounded-full ${step >= 2 ? 'bg-primary' : 'bg-muted'}`} />
           <div className={`h-2 w-16 rounded-full ${step >= 3 ? 'bg-primary' : 'bg-muted'}`} />
         </div>
+
+        {/* Electron API Warning */}
+        {!electronReady && (
+          <div className="mb-6 rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 text-yellow-600">
+            <p className="text-sm font-medium">⚠️ System API not ready</p>
+            <p className="text-xs mt-1">Please wait a moment or restart the application if this persists.</p>
+          </div>
+        )}
 
         {/* Step 1: Introduction */}
         {step === 1 && (
