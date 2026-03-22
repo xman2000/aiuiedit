@@ -8,7 +8,7 @@ import { getMainWindow } from '../index.js'
 const AIUIEDIT_DIR = join(homedir(), 'aiuiedit')
 const SETTINGS_FILE = join(AIUIEDIT_DIR, 'settings.json')
 
-type SupportedFramework = 'nextjs' | 'react-vite' | 'laravel' | 'unknown'
+type SupportedFramework = 'nextjs' | 'react-vite' | 'laravel' | 'mixed' | 'unknown'
 
 interface SourceMappingItem {
   nodeId: string
@@ -70,6 +70,7 @@ interface DiscoveredPage {
   route: string
   name: string
   file: string
+  framework: SupportedFramework
 }
 
 const TAG_TO_COMPONENT: Record<string, string> = {
@@ -170,6 +171,125 @@ async function findFirstFileInTree(rootDir: string, preferredSuffixes: string[],
   })
 
   return found[0]
+}
+
+async function findFilesInTree(rootDir: string, preferredSuffixes: string[], maxDepth = 6, maxResults = 400): Promise<string[]> {
+  const ignoredDirs = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage', '.turbo', '.cache', 'vendor', 'storage'])
+  const normalized = preferredSuffixes.map((suffix) => suffix.replace(/\\/g, '/'))
+  const found: string[] = []
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth || found.length >= maxResults) return
+
+    let entries: any[]
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true, encoding: 'utf-8' }) as any[]
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (found.length >= maxResults) return
+
+      const entryName = String(entry.name)
+      const fullPath = join(dir, entryName)
+
+      if (entry.isDirectory()) {
+        if (ignoredDirs.has(entryName)) continue
+        await walk(fullPath, depth + 1)
+        continue
+      }
+
+      const relativePath = relative(rootDir, fullPath).replace(/\\/g, '/')
+      if (normalized.some((suffix) => relativePath.endsWith(suffix))) {
+        found.push(fullPath)
+      }
+    }
+  }
+
+  await walk(rootDir, 0)
+  return found
+}
+
+async function findLikelyAppRoots(rootDir: string, maxDepth = 4): Promise<string[]> {
+  const ignoredDirs = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage', '.turbo', '.cache', 'vendor', 'storage'])
+  const roots = new Set<string>()
+
+  async function hasFile(dir: string, relativeFile: string): Promise<boolean> {
+    return pathExists(join(dir, relativeFile))
+  }
+
+  async function inspect(dir: string): Promise<void> {
+    const isLaravel = (await hasFile(dir, 'artisan')) && (await hasFile(dir, 'composer.json'))
+    const isNext = (await hasFile(dir, 'next.config.js')) || (await hasFile(dir, 'next.config.mjs')) || (await hasFile(dir, 'next.config.ts'))
+    const isVite = (await hasFile(dir, 'vite.config.js')) || (await hasFile(dir, 'vite.config.ts')) || (await hasFile(dir, 'vite.config.mjs'))
+
+    if (isLaravel || isNext || isVite) {
+      roots.add(dir)
+    }
+  }
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth) return
+    await inspect(dir)
+
+    let entries: any[]
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true, encoding: 'utf-8' }) as any[]
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      const entryName = String(entry.name)
+      if (ignoredDirs.has(entryName)) continue
+      await walk(join(dir, entryName), depth + 1)
+    }
+  }
+
+  await walk(rootDir, 0)
+
+  return Array.from(roots).sort((a, b) => {
+    const relA = relative(rootDir, a)
+    const relB = relative(rootDir, b)
+    const depthA = relA.split(/[\\/]/).filter(Boolean).length
+    const depthB = relB.split(/[\\/]/).filter(Boolean).length
+    if (depthA !== depthB) return depthA - depthB
+    return relA.localeCompare(relB)
+  })
+}
+
+async function resolveImportTargets(selectedRoot: string): Promise<Array<{ root: string; framework: SupportedFramework; entryFile: string }>> {
+  const candidateRoots = [selectedRoot, ...(await findLikelyAppRoots(selectedRoot))]
+  const uniqueRootMap = new Map<string, string>()
+  candidateRoots.forEach((root) => {
+    const normalized = root.replace(/\\/g, '/').toLowerCase()
+    if (!uniqueRootMap.has(normalized)) {
+      uniqueRootMap.set(normalized, root)
+    }
+  })
+  const uniqueRoots = Array.from(uniqueRootMap.values())
+
+  const resolved: Array<{ root: string; framework: SupportedFramework; entryFile: string }> = []
+  const seenEntries = new Set<string>()
+
+  for (const root of uniqueRoots) {
+    const detected = await detectFramework(root)
+    if (!detected.entryFile) continue
+
+    const normalizedEntry = detected.entryFile.replace(/\\/g, '/')
+    if (seenEntries.has(normalizedEntry)) continue
+    seenEntries.add(normalizedEntry)
+
+    resolved.push({
+      root,
+      framework: detected.framework,
+      entryFile: detected.entryFile
+    })
+  }
+
+  return resolved
 }
 
 function viewNameToBladePath(sourceRoot: string, viewName: string): string {
@@ -422,7 +542,8 @@ async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): 
       pages.set(route, {
         route,
         name: titleFromRoute(route),
-        file: viewPath
+        file: viewPath,
+        framework: 'laravel'
       })
     }
 
@@ -436,7 +557,8 @@ async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): 
       pages.set(route, {
         route,
         name: titleFromRoute(route),
-        file: viewPath
+        file: viewPath,
+        framework: 'laravel'
       })
     }
   }
@@ -447,7 +569,8 @@ async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): 
       pages.set('/', {
         route: '/',
         name: 'Home',
-        file: bladePaths
+        file: bladePaths,
+        framework: 'laravel'
       })
     }
   }
@@ -456,7 +579,24 @@ async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): 
     pages.set('/', {
       route: '/',
       name: 'Home',
-      file: fallbackEntry
+      file: fallbackEntry,
+      framework: 'laravel'
+    })
+  }
+
+  const allBladeFiles = await findFilesInTree(sourceRoot, ['.blade.php'], 7, 500)
+  for (const bladeFile of allBladeFiles) {
+    const rel = relative(sourceRoot, bladeFile).replace(/\\/g, '/')
+    if (rel.includes('/partials/') || rel.includes('/components/')) continue
+
+    const existing = Array.from(pages.values()).some((page) => page.file === bladeFile)
+    if (existing) continue
+
+    pages.set(`file:${rel}`, {
+      route: `file:${rel}`,
+      name: rel.split('/').slice(-1)[0].replace('.blade.php', ''),
+      file: bladeFile,
+      framework: 'laravel'
     })
   }
 
@@ -472,7 +612,8 @@ async function discoverSourcePages(sourceRoot: string, framework: SupportedFrame
     {
       route: '/',
       name: 'Home',
-      file: entryFile
+      file: entryFile,
+      framework
     }
   ]
 }
@@ -738,7 +879,12 @@ export function setupIPC() {
     return app.getVersion()
   })
 
-  const importSourceProject = async (sourceRoot: string, entryFile: string, framework: SupportedFramework) => {
+  const importSourceProject = async (
+    sourceRoot: string,
+    entryFile: string,
+    framework: SupportedFramework,
+    discoveredPagesOverride?: DiscoveredPage[]
+  ) => {
     const workspaceRoot = await getWorkspaceRoot()
     const projectsDir = join(workspaceRoot, 'projects')
     await fs.mkdir(projectsDir, { recursive: true })
@@ -748,7 +894,7 @@ export function setupIPC() {
       throw new Error('Selected entry file must be inside the selected source directory')
     }
 
-    const discoveredPages = await discoverSourcePages(sourceRoot, framework, entryFile)
+    const discoveredPages = discoveredPagesOverride || await discoverSourcePages(sourceRoot, framework, entryFile)
     const pagesWithIds = discoveredPages.map((page, index) => ({
       ...page,
       id: `page-${index + 1}`
@@ -820,7 +966,8 @@ export function setupIPC() {
             page.id,
             {
               file: relative(sourceRoot, page.file),
-              route: page.route
+              route: page.route,
+              framework: page.framework
             }
           ])
         )
@@ -1067,11 +1214,41 @@ export function setupIPC() {
 
   // Import existing source project (round-trip bootstrap)
   ipcMain.handle('projects:import-source', async (_event, sourceRoot: string) => {
-    const detected = await detectFramework(sourceRoot)
-    if (!detected.entryFile) {
+    const targets = await resolveImportTargets(sourceRoot)
+    if (targets.length === 0) {
       throw new Error('Could not detect an entry file. Select the app folder (for monorepos, choose the frontend package directory).')
     }
-    return importSourceProject(sourceRoot, detected.entryFile, detected.framework)
+
+    const allPages: DiscoveredPage[] = []
+    for (const target of targets) {
+      const discoveredPages = await discoverSourcePages(target.root, target.framework, target.entryFile)
+      const rootPrefix = relative(sourceRoot, target.root).replace(/\\/g, '/')
+
+      for (const page of discoveredPages) {
+        allPages.push({
+          ...page,
+          framework: target.framework,
+          name: rootPrefix && rootPrefix !== '.' ? `${rootPrefix} / ${page.name}` : page.name,
+          route: rootPrefix && rootPrefix !== '.' && !page.route.startsWith('file:')
+            ? `${normalizeRoute(`/${rootPrefix}`)}${page.route === '/' ? '' : page.route}`
+            : page.route
+        })
+      }
+    }
+
+    const uniquePagesMap = new Map<string, DiscoveredPage>()
+    allPages.forEach((page) => {
+      const key = `${page.file}|${page.route}`
+      if (!uniquePagesMap.has(key)) {
+        uniquePagesMap.set(key, page)
+      }
+    })
+    const uniquePages = Array.from(uniquePagesMap.values())
+
+    const primary = targets[0]
+    const primaryFramework = new Set(targets.map((target) => target.framework)).size > 1 ? 'mixed' : primary.framework
+
+    return importSourceProject(sourceRoot, primary.entryFile, primaryFramework, uniquePages)
   })
 
   ipcMain.handle('projects:import-source-with-entry', async (_event, sourceRoot: string, entryFile: string) => {
@@ -1181,7 +1358,7 @@ export function setupIPC() {
     }
 
     const sourceRoot = project.source.root as string
-    const sourcePages = { ...(project.source.pages || {}) } as Record<string, { file: string; route: string }>
+    const sourcePages = { ...(project.source.pages || {}) } as Record<string, { file: string; route: string; framework?: SupportedFramework }>
     const baseDir = getNextAppBaseDir(project.source.entryFile as string)
     const normalizedRoute = normalizeRoute(page.route)
 
@@ -1211,7 +1388,8 @@ export function setupIPC() {
 
     sourcePages[page.id] = {
       file: desiredRel,
-      route: normalizedRoute
+      route: normalizedRoute,
+      framework: 'nextjs'
     }
 
     const updatedProject = {
@@ -1243,7 +1421,7 @@ export function setupIPC() {
     }
 
     const sourceRoot = project.source.root as string
-    const sourcePages: Record<string, { file: string; route: string }> = project.source.pages || {
+    const sourcePages: Record<string, { file: string; route: string; framework?: SupportedFramework }> = project.source.pages || {
       'page-1': {
         file: project.source.entryFile,
         route: '/'

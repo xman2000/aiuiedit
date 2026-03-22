@@ -8,10 +8,10 @@ export interface Project {
   designSystem: DesignSystem
   source?: {
     root: string
-    framework: 'nextjs' | 'react-vite' | 'laravel' | 'unknown'
+    framework: 'nextjs' | 'react-vite' | 'laravel' | 'mixed' | 'unknown'
     entryFile: string
     roundTrip: boolean
-    pages?: Record<string, { file: string; route: string }>
+    pages?: Record<string, { file: string; route: string; framework?: 'nextjs' | 'react-vite' | 'laravel' | 'mixed' | 'unknown' }>
   }
 }
 
