@@ -1,8 +1,10 @@
 import { useEffect } from 'react'
 import { useCanvasStore } from '@/store/useCanvasStore'
+import { useProjectStore } from '@/store/useProjectStore'
 
 // Keyboard shortcuts handler
 export function useKeyboardShortcuts() {
+  const { setDirty, saveProject, currentProject } = useProjectStore()
   const {
     selectedIds,
     nodes,
@@ -14,7 +16,13 @@ export function useKeyboardShortcuts() {
     selectAll,
     deselectAll,
     copySelected,
-    paste
+    paste,
+    alignSelected,
+    distributeSelected,
+    groupSelected,
+    ungroupSelected,
+    toggleLockSelected,
+    toggleVisibilitySelected
   } = useCanvasStore()
 
   useEffect(() => {
@@ -30,6 +38,7 @@ export function useKeyboardShortcuts() {
       if (e.key === 'Delete' || e.key === 'Backspace') {
         if (selectedIds.size > 0) {
           selectedIds.forEach(id => deleteNode(id))
+          setDirty(true)
           e.preventDefault()
         }
       }
@@ -57,6 +66,16 @@ export function useKeyboardShortcuts() {
         if (canRedo) redo()
       }
 
+      // Save
+      if (metaKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        if (currentProject) {
+          saveProject()
+            .then(() => window.showToast?.('Project saved!', 'success'))
+            .catch(() => window.showToast?.('Failed to save', 'error'))
+        }
+      }
+
       // Copy
       if (metaKey && e.key.toLowerCase() === 'c') {
         e.preventDefault()
@@ -67,6 +86,7 @@ export function useKeyboardShortcuts() {
       if (metaKey && e.key.toLowerCase() === 'v') {
         e.preventDefault()
         paste()
+        setDirty(true)
       }
 
       // Duplicate
@@ -74,6 +94,37 @@ export function useKeyboardShortcuts() {
         e.preventDefault()
         copySelected()
         paste()
+        setDirty(true)
+      }
+
+      // Group / Ungroup
+      if (metaKey && e.key.toLowerCase() === 'g' && !e.shiftKey) {
+        e.preventDefault()
+        if (selectedIds.size >= 2) {
+          groupSelected()
+          setDirty(true)
+        }
+      }
+
+      if (metaKey && e.shiftKey && e.key.toLowerCase() === 'g') {
+        e.preventDefault()
+        if (selectedIds.size > 0) {
+          ungroupSelected()
+          setDirty(true)
+        }
+      }
+
+      // Lock / visibility toggles
+      if (selectedIds.size > 0 && e.altKey && e.key.toLowerCase() === 'l') {
+        e.preventDefault()
+        toggleLockSelected()
+        setDirty(true)
+      }
+
+      if (selectedIds.size > 0 && e.altKey && e.key.toLowerCase() === 'h') {
+        e.preventDefault()
+        toggleVisibilitySelected()
+        setDirty(true)
       }
 
       // Arrow keys for nudging
@@ -107,12 +158,51 @@ export function useKeyboardShortcuts() {
             })
           }
         })
+        setDirty(true)
+      }
+
+      // Alignment shortcuts: Alt + Shift + Arrow
+      if (selectedIds.size > 0 && e.altKey && e.shiftKey) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          alignSelected('left')
+          setDirty(true)
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          alignSelected('right')
+          setDirty(true)
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          alignSelected('top')
+          setDirty(true)
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          alignSelected('bottom')
+          setDirty(true)
+        }
+      }
+
+      // Distribution shortcuts
+      if (selectedIds.size >= 3 && e.altKey && metaKey) {
+        if (e.key.toLowerCase() === 'h') {
+          e.preventDefault()
+          distributeSelected('horizontal')
+          setDirty(true)
+        }
+        if (e.key.toLowerCase() === 'v') {
+          e.preventDefault()
+          distributeSelected('vertical')
+          setDirty(true)
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedIds, nodes, deleteNode, undo, redo, canUndo, canRedo, selectAll, deselectAll, copySelected, paste])
+  }, [selectedIds, nodes, deleteNode, undo, redo, canUndo, canRedo, selectAll, deselectAll, copySelected, paste, alignSelected, distributeSelected, groupSelected, ungroupSelected, toggleLockSelected, toggleVisibilitySelected, setDirty, saveProject, currentProject])
 }
 
 // Export keyboard shortcuts map for reference
@@ -125,6 +215,14 @@ export const KEYBOARD_SHORTCUTS = {
   'Cmd/Ctrl + C': 'Copy',
   'Cmd/Ctrl + V': 'Paste',
   'Cmd/Ctrl + D': 'Duplicate',
+  'Cmd/Ctrl + S': 'Save project',
+  'Cmd/Ctrl + G': 'Group selected',
+  'Cmd/Ctrl + Shift + G': 'Ungroup selected',
   'Arrow Keys': 'Nudge 1px',
-  'Shift + Arrow': 'Nudge 10px'
+  'Shift + Arrow': 'Nudge 10px',
+  'Shift + Alt + Arrows': 'Align selected',
+  'Cmd/Ctrl + Alt + H': 'Distribute horizontal',
+  'Cmd/Ctrl + Alt + V': 'Distribute vertical',
+  'Alt + L': 'Toggle lock selected',
+  'Alt + H': 'Toggle hide/show selected'
 }

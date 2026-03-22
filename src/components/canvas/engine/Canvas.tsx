@@ -4,8 +4,8 @@ import { CanvasNodeComponent } from '../components/CanvasNode'
 import { MousePointer2, Plus } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
+import { createCanvasNode } from '@/core/canvasNodeFactory'
 import { useProjectStore } from '@/store/useProjectStore'
-import type { CanvasNode } from '@/types'
 
 export function Canvas() {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -17,10 +17,9 @@ export function Canvas() {
     setZoom, 
     setViewport, 
     selectNode,
-    addNode,
-    pushHistory
+    addNode
   } = useCanvasStore()
-  const { currentProject } = useProjectStore()
+  const { currentProject, setDirty } = useProjectStore()
   
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
@@ -73,41 +72,24 @@ export function Canvas() {
 
   const handleNodeSelect = useCallback((nodeId: string) => (e: React.MouseEvent) => {
     e.stopPropagation()
-    selectNode(nodeId, e.metaKey || e.ctrlKey)
-  }, [selectNode])
+    const clicked = nodes.get(nodeId)
+    const parentNode = clicked?.parentId ? nodes.get(clicked.parentId) : null
+    const targetId = parentNode?.type === 'group' ? parentNode.id : nodeId
+    selectNode(targetId, e.metaKey || e.ctrlKey)
+  }, [selectNode, nodes])
 
   const handleAddNode = useCallback((type: string) => {
     if (!currentProject) return
 
-    const component = BUILT_IN_COMPONENTS.find(c => c.type === type)
-    if (!component) return
-
-    const newNode: CanvasNode = {
-      id: `node-${Date.now()}`,
-      type,
-      parentId: null,
-      position: { 
-        x: 100 + Math.random() * 50, 
-        y: 100 + Math.random() * 50 
-      },
-      size: { 
-        width: type === 'container' ? 300 : type === 'button' ? 120 : type === 'input' ? 200 : 200, 
-        height: type === 'container' ? 200 : type === 'input' ? 40 : type === 'button' ? 40 : 'auto' 
-      },
-      style: component.defaultStyle,
-      props: component.defaultProps,
-      children: [],
-      name: component.name,
-      locked: false,
-      visible: true
-    }
+    const newNode = createCanvasNode(type)
+    if (!newNode) return
 
     addNode(newNode)
-    pushHistory()
+    setDirty(true)
     
     // Select the new node
     useCanvasStore.getState().selectNode(newNode.id)
-  }, [currentProject, addNode, pushHistory])
+  }, [currentProject, addNode, setDirty])
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -172,6 +154,7 @@ export function Canvas() {
             {/* Render Nodes - Inside Page Frame */}
             <div className="relative w-full h-full overflow-hidden">
               {Array.from(nodes.values()).map(node => (
+                node.visible ? (
                 <CanvasNodeComponent
                   key={node.id}
                   node={node}
@@ -179,6 +162,7 @@ export function Canvas() {
                   onSelect={handleNodeSelect(node.id)}
                   scale={zoom}
                 />
+                ) : null
               ))}
 
               {/* Empty State - Inside Page Frame */}

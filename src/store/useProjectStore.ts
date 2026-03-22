@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Project, Page } from '@/types'
+import { useCanvasStore } from '@/store/useCanvasStore'
 
 interface ProjectState {
   currentProject: Project | null
@@ -78,8 +79,22 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     const { currentProject, projectPath } = get()
     if (!currentProject || !projectPath) return
 
-    // TODO: Implement actual save via IPC
-    console.log('Saving project...', projectPath)
+    const canvasState = useCanvasStore.getState()
+    const serializedCanvas = {
+      nodes: Array.from(canvasState.nodes.values()),
+      selectedIds: Array.from(canvasState.selectedIds),
+      zoom: canvasState.zoom,
+      viewport: canvasState.viewport
+    }
+
+    await window.electron.saveProject(projectPath, {
+      project: {
+        ...currentProject,
+        updatedAt: new Date().toISOString()
+      },
+      canvas: serializedCanvas
+    })
+
     set({ isDirty: false })
   }
 }))

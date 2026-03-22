@@ -9,6 +9,10 @@ const electronAPI = {
 
   // Dialog
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
+  saveFileDialog: (options) => ipcRenderer.invoke('dialog:save-file', options),
+
+  // File system
+  writeTextFile: (filePath, content) => ipcRenderer.invoke('file:write-text', filePath, content),
 
   // Settings
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),

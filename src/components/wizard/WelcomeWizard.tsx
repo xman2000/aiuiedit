@@ -69,7 +69,7 @@ export function WelcomeWizard() {
       })
 
       // Create the project
-      const project = await window.electron.createProject(projectName)
+      await window.electron.createProject(projectName)
 
       setSettings({ workspacePath })
       setWelcomeOpen(false)

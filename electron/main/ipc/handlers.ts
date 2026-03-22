@@ -8,6 +8,22 @@ import { getMainWindow } from '../index.js'
 const AIUIEDIT_DIR = join(homedir(), 'aiuiedit')
 const SETTINGS_FILE = join(AIUIEDIT_DIR, 'settings.json')
 
+async function getWorkspaceRoot(): Promise<string> {
+  await ensureaiuieditDir()
+
+  try {
+    const settingsRaw = await fs.readFile(SETTINGS_FILE, 'utf-8')
+    const settings = JSON.parse(settingsRaw)
+    if (settings?.workspacePath && typeof settings.workspacePath === 'string') {
+      return settings.workspacePath
+    }
+  } catch {
+    // Fall back to the app directory when settings do not exist yet.
+  }
+
+  return AIUIEDIT_DIR
+}
+
 // Ensure aiuiedit directory exists
 async function ensureaiuieditDir() {
   try {
@@ -48,6 +64,32 @@ export function setupIPC() {
     return result.filePaths[0]
   })
 
+  ipcMain.handle('dialog:save-file', async (_event, options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => {
+    const mainWindow = getMainWindow()
+    if (!mainWindow) {
+      console.error('No main window available')
+      return null
+    }
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: options?.title || 'Save File',
+      defaultPath: options?.defaultPath,
+      filters: options?.filters,
+      properties: ['createDirectory', 'showOverwriteConfirmation']
+    })
+
+    if (result.canceled) {
+      return null
+    }
+
+    return result.filePath || null
+  })
+
+  ipcMain.handle('file:write-text', async (_event, filePath: string, content: string) => {
+    await fs.writeFile(filePath, content, 'utf-8')
+    return true
+  })
+
   // Save settings
   ipcMain.handle('settings:save', async (_event, settings) => {
     await ensureaiuieditDir()
@@ -80,8 +122,10 @@ export function setupIPC() {
 
   // List projects
   ipcMain.handle('projects:list', async () => {
-    await ensureaiuieditDir()
-    const projectsDir = join(AIUIEDIT_DIR, 'projects')
+    const workspaceRoot = await getWorkspaceRoot()
+    const projectsDir = join(workspaceRoot, 'projects')
+    await fs.mkdir(projectsDir, { recursive: true })
+
     try {
       const entries = await fs.readdir(projectsDir, { withFileTypes: true })
       const projects = []
@@ -111,8 +155,11 @@ export function setupIPC() {
 
   // Create new project
   ipcMain.handle('projects:create', async (_event, name: string) => {
-    await ensureaiuieditDir()
-    const projectDir = join(AIUIEDIT_DIR, 'projects', `${name}.canvas`)
+    const workspaceRoot = await getWorkspaceRoot()
+    const projectsDir = join(workspaceRoot, 'projects')
+    await fs.mkdir(projectsDir, { recursive: true })
+
+    const projectDir = join(projectsDir, `${name}.canvas`)
     
     try {
       await fs.access(projectDir)

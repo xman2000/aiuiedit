@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react'
 import { useCanvasStore } from '@/store/useCanvasStore'
+import { useProjectStore } from '@/store/useProjectStore'
 import type { CanvasNode } from '@/types'
 import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
 
@@ -14,38 +15,87 @@ type ResizeHandle = 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | null
 
 export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: CanvasNodeProps) {
   const nodeRef = useRef<HTMLDivElement>(null)
-  const { updateNode, pushHistory } = useCanvasStore()
+  const { updateNode, pushHistory, selectedIds, nodes } = useCanvasStore()
+  const { setDirty } = useProjectStore()
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const [resizeHandle, setResizeHandle] = useState<ResizeHandle>(null)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 })
+  const [initialPositions, setInitialPositions] = useState<Record<string, { x: number; y: number }>>({})
   const [initialSize, setInitialSize] = useState({ width: 0, height: 0 })
 
   const component = BUILT_IN_COMPONENTS.find(c => c.type === node.type)
+
+  const splitByComma = (value: unknown): string[] => {
+    if (typeof value !== 'string') return []
+    return value.split(',').map((item) => item.trim()).filter(Boolean)
+  }
+
+  const splitRows = (value: unknown): string[][] => {
+    if (typeof value !== 'string') return []
+    return value
+      .split(';')
+      .map((row) => row.trim())
+      .filter(Boolean)
+      .map((row) => row.split('|').map((cell) => cell.trim()))
+  }
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return // Only left click
     
     e.stopPropagation()
     onSelect(e)
+
+    if (node.locked) return
     
     setIsDragging(true)
     setDragStart({ x: e.clientX, y: e.clientY })
     setInitialPosition({ x: node.position.x, y: node.position.y })
-  }, [node.position, onSelect])
+
+    if (isSelected && selectedIds.size > 1) {
+      const allInitial: Record<string, { x: number; y: number }> = {}
+      selectedIds.forEach((id) => {
+        const selectedNode = nodes.get(id)
+        if (selectedNode) {
+          allInitial[id] = {
+            x: selectedNode.position.x,
+            y: selectedNode.position.y
+          }
+        }
+      })
+      setInitialPositions(allInitial)
+    } else {
+      setInitialPositions({
+        [node.id]: { x: node.position.x, y: node.position.y }
+      })
+    }
+  }, [node.id, node.locked, node.position, onSelect, isSelected, selectedIds, nodes])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (isDragging) {
       const deltaX = (e.clientX - dragStart.x) / scale
       const deltaY = (e.clientY - dragStart.y) / scale
-      
-      updateNode(node.id, {
-        position: {
-          x: initialPosition.x + deltaX,
-          y: initialPosition.y + deltaY
-        }
-      })
+
+      const dragIds = Object.keys(initialPositions)
+      if (dragIds.length > 1) {
+        dragIds.forEach((id) => {
+          const start = initialPositions[id]
+          updateNode(id, {
+            position: {
+              x: start.x + deltaX,
+              y: start.y + deltaY
+            }
+          })
+        })
+      } else {
+        updateNode(node.id, {
+          position: {
+            x: initialPosition.x + deltaX,
+            y: initialPosition.y + deltaY
+          }
+        })
+      }
     } else if (isResizing && resizeHandle) {
       const deltaX = (e.clientX - dragStart.x) / scale
       const deltaY = (e.clientY - dragStart.y) / scale
@@ -78,20 +128,23 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
         size: { width: newWidth, height: newHeight }
       })
     }
-  }, [isDragging, isResizing, resizeHandle, dragStart, initialPosition, initialSize, scale, node.id, updateNode])
+  }, [isDragging, isResizing, resizeHandle, dragStart, initialPosition, initialPositions, initialSize, scale, node.id, updateNode])
 
   const handleMouseUp = useCallback(() => {
     if (isDragging || isResizing) {
       pushHistory()
+      setDirty(true)
     }
     setIsDragging(false)
     setIsResizing(false)
     setResizeHandle(null)
-  }, [isDragging, isResizing, pushHistory])
+  }, [isDragging, isResizing, pushHistory, setDirty])
 
   const handleResizeStart = useCallback((e: React.MouseEvent, handle: ResizeHandle) => {
     e.stopPropagation()
     e.preventDefault()
+
+    if (node.locked) return
     
     setIsResizing(true)
     setResizeHandle(handle)
@@ -101,7 +154,7 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
       width: typeof node.size.width === 'number' ? node.size.width : parseInt(node.size.width as string) || 100, 
       height: typeof node.size.height === 'number' ? node.size.height : parseInt(node.size.height as string) || 100 
     })
-  }, [node.position, node.size])
+  }, [node.locked, node.position, node.size])
 
   const renderContent = () => {
     switch (node.type) {
@@ -304,12 +357,468 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
           </label>
         )
 
+      case 'navbar': {
+        const links = splitByComma(node.props.links)
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px'
+            }}
+          >
+            <span style={{ fontWeight: 700 }}>{node.props.brand || 'Brand'}</span>
+            <div style={{ display: 'flex', gap: '14px', fontSize: '13px', opacity: 0.95 }}>
+              {links.map((item, index) => <span key={`${item}-${index}`}>{item}</span>)}
+            </div>
+          </div>
+        )
+      }
+
+      case 'tabs': {
+        const tabs = splitByComma(node.props.tabs)
+        const active = Math.max(0, Math.min(tabs.length - 1, Number(node.props.activeTab) || 0))
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            <div style={{ display: 'flex', borderBottom: '1px solid #E5E7EB' }}>
+              {tabs.map((tab, index) => (
+                <div
+                  key={`${tab}-${index}`}
+                  style={{
+                    padding: '10px 12px',
+                    fontSize: '13px',
+                    fontWeight: index === active ? 600 : 500,
+                    borderBottom: index === active ? '2px solid #3B82F6' : '2px solid transparent',
+                    color: index === active ? '#1D4ED8' : '#6B7280'
+                  }}
+                >
+                  {tab}
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: '12px', fontSize: '13px', color: '#6B7280' }}>Tab content preview</div>
+          </div>
+        )
+      }
+
+      case 'breadcrumb': {
+        const items = splitByComma(node.props.items)
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            {items.map((item, index) => (
+              <div key={`${item}-${index}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: index === items.length - 1 ? 600 : 400 }}>{item}</span>
+                {index < items.length - 1 && <span style={{ color: '#9CA3AF' }}>/</span>}
+              </div>
+            ))}
+          </div>
+        )
+      }
+
+      case 'pagination': {
+        const currentPage = Math.max(1, Number(node.props.currentPage) || 1)
+        const totalPages = Math.max(1, Number(node.props.totalPages) || 1)
+        const pages = Array.from({ length: Math.min(totalPages, 5) }, (_, i) => i + 1)
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '12px', color: '#6B7280' }}>{'<'}</span>
+            {pages.map((page) => (
+              <div
+                key={page}
+                style={{
+                  minWidth: '26px',
+                  height: '26px',
+                  borderRadius: '6px',
+                  border: '1px solid #D1D5DB',
+                  backgroundColor: page === currentPage ? '#2563EB' : '#FFFFFF',
+                  color: page === currentPage ? '#FFFFFF' : '#374151',
+                  fontSize: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {page}
+              </div>
+            ))}
+            <span style={{ fontSize: '12px', color: '#6B7280' }}>{'>'}</span>
+          </div>
+        )
+      }
+
+      case 'alert': {
+        const variant = (node.props.variant || 'warning') as string
+        const palette: Record<string, { bg: string; border: string; text: string }> = {
+          info: { bg: '#EFF6FF', border: '#BFDBFE', text: '#1E40AF' },
+          success: { bg: '#ECFDF5', border: '#A7F3D0', text: '#065F46' },
+          warning: { bg: '#FFFBEB', border: '#FDE68A', text: '#92400E' },
+          error: { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B' }
+        }
+        const colors = palette[variant] || palette.warning
+
+        return (
+          <div
+            style={{
+              ...node.style,
+              backgroundColor: colors.bg,
+              borderColor: colors.border,
+              color: colors.text,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%'
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: '4px' }}>{node.props.title || 'Alert'}</div>
+            <div style={{ fontSize: '13px' }}>{node.props.message || 'Message'}</div>
+          </div>
+        )
+      }
+
+      case 'progress': {
+        const value = Math.max(0, Math.min(100, Number(node.props.value) || 0))
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4B5563' }}>
+              <span>{node.props.label || 'Progress'}</span>
+              <span>{value}%</span>
+            </div>
+            <div style={{ height: '8px', borderRadius: '9999px', backgroundColor: '#E5E7EB', overflow: 'hidden' }}>
+              <div style={{ width: `${value}%`, height: '100%', borderRadius: 'inherit', backgroundColor: '#3B82F6' }} />
+            </div>
+          </div>
+        )
+      }
+
+      case 'toast': {
+        const variant = (node.props.variant || 'success') as string
+        const accent: Record<string, string> = {
+          success: '#10B981',
+          info: '#3B82F6',
+          warning: '#F59E0B',
+          error: '#EF4444'
+        }
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}
+          >
+            <span style={{ width: '8px', height: '8px', borderRadius: '9999px', backgroundColor: accent[variant] || accent.success }} />
+            <span style={{ fontSize: '13px' }}>{node.props.message || 'Notification'}</span>
+          </div>
+        )
+      }
+
+      case 'modal':
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between'
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: '8px' }}>{node.props.title || 'Modal title'}</div>
+              <p style={{ margin: 0, color: '#6B7280', fontSize: '13px' }}>{node.props.body || 'Modal body'}</p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button style={{ border: '1px solid #D1D5DB', borderRadius: '6px', background: '#FFFFFF', padding: '6px 10px', fontSize: '12px' }}>{node.props.cancelText || 'Cancel'}</button>
+              <button style={{ border: 'none', borderRadius: '6px', background: '#2563EB', color: '#FFFFFF', padding: '6px 10px', fontSize: '12px' }}>{node.props.confirmText || 'Confirm'}</button>
+            </div>
+          </div>
+        )
+
+      case 'radio': {
+        const options = splitByComma(node.props.options)
+        const selected = (node.props.selected || '').toString()
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '12px', fontWeight: 600 }}>{node.props.label || 'Choose one'}</span>
+            {options.map((option) => (
+              <label key={option} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px' }}>
+                <input type="radio" checked={option === selected} readOnly />
+                {option}
+              </label>
+            ))}
+          </div>
+        )
+      }
+
+      case 'switch': {
+        const checked = Boolean(node.props.checked)
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px'
+            }}
+          >
+            <span style={{ fontSize: '13px' }}>{node.props.label || 'Switch'}</span>
+            <span
+              style={{
+                width: '42px',
+                height: '24px',
+                backgroundColor: checked ? '#2563EB' : '#D1D5DB',
+                borderRadius: '9999px',
+                position: 'relative'
+              }}
+            >
+              <span
+                style={{
+                  width: '18px',
+                  height: '18px',
+                  borderRadius: '9999px',
+                  backgroundColor: '#FFFFFF',
+                  position: 'absolute',
+                  top: '3px',
+                  left: checked ? '21px' : '3px'
+                }}
+              />
+            </span>
+          </div>
+        )
+      }
+
+      case 'slider': {
+        const min = Number(node.props.min) || 0
+        const max = Number(node.props.max) || 100
+        const value = Math.max(min, Math.min(max, Number(node.props.value) || min))
+        const progress = max === min ? 0 : ((value - min) / (max - min)) * 100
+
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: '6px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+              <span>{node.props.label || 'Slider'}</span>
+              <span>{value}</span>
+            </div>
+            <div style={{ position: 'relative', height: '6px', borderRadius: '9999px', backgroundColor: '#E5E7EB' }}>
+              <div style={{ width: `${progress}%`, height: '100%', borderRadius: 'inherit', backgroundColor: '#2563EB' }} />
+            </div>
+          </div>
+        )
+      }
+
+      case 'table': {
+        const headers = splitByComma(node.props.headers)
+        const rows = splitRows(node.props.rows)
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%'
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+              <thead style={{ backgroundColor: '#F9FAFB' }}>
+                <tr>
+                  {headers.map((header) => (
+                    <th key={header} style={{ textAlign: 'left', padding: '8px', borderBottom: '1px solid #E5E7EB' }}>{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, rowIndex) => (
+                  <tr key={`row-${rowIndex}`}>
+                    {row.map((cell, cellIndex) => (
+                      <td key={`cell-${rowIndex}-${cellIndex}`} style={{ padding: '8px', borderBottom: '1px solid #F3F4F6', color: '#4B5563' }}>{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+
+      case 'list': {
+        const items = splitByComma(node.props.items)
+        const isOrdered = Boolean(node.props.ordered)
+        const ListTag = isOrdered ? 'ol' : 'ul'
+        return (
+          <ListTag
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              margin: 0,
+              paddingLeft: '20px',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '6px'
+            }}
+          >
+            {items.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}
+          </ListTag>
+        )
+      }
+
+      case 'statistic':
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+          >
+            <span style={{ fontSize: '12px', color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{node.props.label || 'Statistic'}</span>
+            <span style={{ fontSize: '28px', fontWeight: 700, lineHeight: 1 }}>{node.props.value || '0'}</span>
+            <span style={{ fontSize: '12px', color: '#059669' }}>{node.props.trend || '+0%'}</span>
+          </div>
+        )
+
+      case 'timeline': {
+        const events = splitRows(node.props.events)
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '10px'
+            }}
+          >
+            {events.map((event, index) => (
+              <div key={`event-${index}`} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                <span style={{ width: '8px', height: '8px', marginTop: '6px', borderRadius: '9999px', backgroundColor: '#3B82F6' }} />
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: 600 }}>{event[0] || 'Event'}</div>
+                  <div style={{ fontSize: '12px', color: '#6B7280' }}>{event[1] || ''}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      }
+
+      case 'group':
+        return (
+          <div
+            style={{
+              ...node.style,
+              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'flex-start'
+            }}
+          >
+            <span
+              style={{
+                fontSize: '11px',
+                padding: '2px 6px',
+                borderRadius: '9999px',
+                backgroundColor: '#DBEAFE',
+                color: '#1D4ED8',
+                transform: 'translate(6px, 6px)'
+              }}
+            >
+              Group ({node.children.length})
+            </span>
+          </div>
+        )
+
       default:
         return <div style={{ width: '100%', height: '100%', background: '#ccc' }} />
     }
   }
 
-  if (!component) return null
+  if (!component && node.type !== 'group') return null
 
   const width = typeof node.size.width === 'number' ? node.size.width : parseInt(node.size.width as string) || 100
   const height = typeof node.size.height === 'number' ? node.size.height : parseInt(node.size.height as string) || 100
@@ -327,16 +836,17 @@ export function CanvasNodeComponent({ node, isSelected, onSelect, scale }: Canva
         top: node.position.y,
         width: width,
         height: height,
-        cursor: isDragging ? 'grabbing' : isResizing ? 'grabbing' : 'grab',
+        cursor: node.locked ? 'not-allowed' : isDragging ? 'grabbing' : isResizing ? 'grabbing' : 'grab',
         userSelect: 'none',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        opacity: node.locked ? 0.9 : 1
       }}
       className={isSelected ? 'selection-outline' : ''}
     >
       {renderContent()}
       
       {/* Resize Handles */}
-      {isSelected && !isDragging && (
+      {isSelected && !isDragging && !node.locked && (
         <>
           {/* Corner handles */}
           <ResizeHandle position="nw" onMouseDown={(e) => handleResizeStart(e, 'nw')} />

@@ -1,9 +1,11 @@
 import { useCanvasStore } from '@/store/useCanvasStore'
+import { useProjectStore } from '@/store/useProjectStore'
 import { Settings2, Layout, Type, Palette, Box } from 'lucide-react'
 import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
 
 export function PropertiesPanel() {
   const { selectedIds, nodes, updateNode } = useCanvasStore()
+  const { setDirty } = useProjectStore()
   const selectedNodes = Array.from(selectedIds).map((id) => nodes.get(id)).filter(Boolean)
 
   if (selectedNodes.length === 0) {
@@ -28,24 +30,38 @@ export function PropertiesPanel() {
     updateNode(node.id, {
       props: { ...node.props, [propName]: value }
     })
+    setDirty(true)
   }
 
   const handleStyleChange = (styleProp: string, value: string) => {
     updateNode(node.id, {
       style: { ...node.style, [styleProp]: value }
     })
+    setDirty(true)
   }
 
   const handlePositionChange = (axis: 'x' | 'y', value: number) => {
     updateNode(node.id, {
       position: { ...node.position, [axis]: value }
     })
+    setDirty(true)
   }
 
   const handleSizeChange = (dimension: 'width' | 'height', value: number | string) => {
     updateNode(node.id, {
       size: { ...node.size, [dimension]: value }
     })
+    setDirty(true)
+  }
+
+  const handleToggleLock = (value: boolean) => {
+    updateNode(node.id, { locked: value })
+    setDirty(true)
+  }
+
+  const handleToggleVisibility = (value: boolean) => {
+    updateNode(node.id, { visible: value })
+    setDirty(true)
   }
 
   return (
@@ -104,6 +120,34 @@ export function PropertiesPanel() {
                   className="w-full bg-transparent text-sm outline-none"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Node State */}
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <Settings2 className="h-3 w-3" />
+              Node State
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="inline-flex items-center gap-2 rounded border p-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.locked)}
+                  onChange={(e) => handleToggleLock(e.target.checked)}
+                />
+                Locked
+              </label>
+
+              <label className="inline-flex items-center gap-2 rounded border p-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={Boolean(node.visible)}
+                  onChange={(e) => handleToggleVisibility(e.target.checked)}
+                />
+                Visible
+              </label>
             </div>
           </div>
 
@@ -213,6 +257,17 @@ export function PropertiesPanel() {
                         <option key={option} value={option}>{option}</option>
                       ))}
                     </select>
+                  )}
+
+                  {prop.type === 'boolean' && (
+                    <label className="inline-flex items-center gap-2 rounded border px-2 py-1 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(node.props[prop.name])}
+                        onChange={(e) => handlePropChange(prop.name, e.target.checked)}
+                      />
+                      {Boolean(node.props[prop.name]) ? 'True' : 'False'}
+                    </label>
                   )}
                 </div>
               ))}

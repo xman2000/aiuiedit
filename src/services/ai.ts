@@ -109,7 +109,7 @@ Current Context:
   - Accent: ${context.designSystem.colors.accent.value}
 - Font: ${context.designSystem.typography.fontFamily}
 
-Available components: button, text, heading, container, image, input
+Available components: button, text, heading, container, image, input, card, textarea, checkbox, select, link, badge, divider, avatar, label, navbar, tabs, breadcrumb, pagination, alert, progress, toast, modal, radio, switch, slider, table, list, statistic, timeline
 
 You can help users by:
 1. Adding new components to the canvas
@@ -131,7 +131,31 @@ Respond conversationally but concisely. If the user wants to make a change, desc
       { type: 'heading', keywords: ['heading', 'header', 'title'] },
       { type: 'container', keywords: ['container', 'box', 'div'] },
       { type: 'image', keywords: ['image', 'picture', 'photo'] },
-      { type: 'input', keywords: ['input', 'field', 'textbox'] }
+      { type: 'input', keywords: ['input', 'field', 'textbox'] },
+      { type: 'card', keywords: ['card'] },
+      { type: 'textarea', keywords: ['textarea', 'long text'] },
+      { type: 'checkbox', keywords: ['checkbox'] },
+      { type: 'select', keywords: ['select', 'dropdown'] },
+      { type: 'link', keywords: ['link', 'anchor'] },
+      { type: 'badge', keywords: ['badge', 'tag'] },
+      { type: 'divider', keywords: ['divider', 'separator'] },
+      { type: 'avatar', keywords: ['avatar', 'profile picture'] },
+      { type: 'label', keywords: ['label'] },
+      { type: 'navbar', keywords: ['navbar', 'navigation bar', 'top nav'] },
+      { type: 'tabs', keywords: ['tabs', 'tabbed'] },
+      { type: 'breadcrumb', keywords: ['breadcrumb'] },
+      { type: 'pagination', keywords: ['pagination', 'pager'] },
+      { type: 'alert', keywords: ['alert', 'warning message'] },
+      { type: 'progress', keywords: ['progress', 'progress bar'] },
+      { type: 'toast', keywords: ['toast', 'notification'] },
+      { type: 'modal', keywords: ['modal', 'dialog'] },
+      { type: 'radio', keywords: ['radio', 'radio group'] },
+      { type: 'switch', keywords: ['switch', 'toggle'] },
+      { type: 'slider', keywords: ['slider', 'range'] },
+      { type: 'table', keywords: ['table', 'grid'] },
+      { type: 'list', keywords: ['list', 'checklist'] },
+      { type: 'statistic', keywords: ['statistic', 'stat', 'metric'] },
+      { type: 'timeline', keywords: ['timeline', 'roadmap'] }
     ]
 
     for (const match of componentMatches) {

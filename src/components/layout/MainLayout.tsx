@@ -10,46 +10,25 @@ import { PropertiesPanel } from '@/components/panels/PropertiesPanel'
 import { ChatPanel } from '@/components/panels/ChatPanel'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useCanvasStore } from '@/store/useCanvasStore'
-import { useAppStore } from '@/store/useAppStore'
 import { useKeyboardShortcuts } from '@/utils/shortcuts'
 import { Button } from '@/components/common/Button'
 import { Plus } from 'lucide-react'
+import { createCanvasNode } from '@/core/canvasNodeFactory'
 import type { CanvasNode } from '@/types'
-import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
 
 export function MainLayout() {
-  const { currentProject } = useProjectStore()
-  const { addNode, pushHistory } = useCanvasStore()
+  const { currentProject, setDirty } = useProjectStore()
+  const { addNode } = useCanvasStore()
   const [activeLeftPanel, setActiveLeftPanel] = useState<'library' | 'pages' | 'design' | 'settings'>('library')
   
   useKeyboardShortcuts()
 
   const handleAddComponent = (type: string) => {
-    const component = BUILT_IN_COMPONENTS.find(c => c.type === type)
-    if (!component) return
-
-    const newNode: CanvasNode = {
-      id: `node-${Date.now()}`,
-      type,
-      parentId: null,
-      position: { 
-        x: 100 + Math.random() * 50, 
-        y: 100 + Math.random() * 50 
-      },
-      size: { 
-        width: type === 'container' ? 300 : type === 'button' ? 120 : type === 'input' ? 200 : 200, 
-        height: type === 'container' ? 200 : type === 'input' ? 40 : type === 'button' ? 40 : 'auto' as any
-      },
-      style: component.defaultStyle,
-      props: component.defaultProps,
-      children: [],
-      name: component.name,
-      locked: false,
-      visible: true
-    }
+    const newNode = createCanvasNode(type)
+    if (!newNode) return
 
     addNode(newNode)
-    pushHistory()
+    setDirty(true)
   }
 
   return (
@@ -143,15 +122,28 @@ export function MainLayout() {
 
 function EmptyState() {
   const { setCurrentProject } = useProjectStore()
-  const { settings } = useAppStore()
+  const { setNodes, setZoom, setViewport, deselectAll } = useCanvasStore()
   const [isCreating, setIsCreating] = useState(false)
+  const [isOpening, setIsOpening] = useState(false)
   const [workspace, setWorkspace] = useState<string>('')
+  const [existingProjects, setExistingProjects] = useState<Array<{ id: string; name: string; path: string; updatedAt?: string }>>([])
 
   useEffect(() => {
-    // Load workspace path
-    window.electron?.loadSettings().then(s => {
+    // Load workspace path and existing projects
+    Promise.all([
+      window.electron?.loadSettings(),
+      window.electron?.listProjects()
+    ]).then(([s, projects]) => {
       setWorkspace(s?.workspacePath || '')
-    }).catch(() => setWorkspace(''))
+      setExistingProjects((projects || []).sort((a: any, b: any) => {
+        const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime()
+        const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime()
+        return bTime - aTime
+      }))
+    }).catch(() => {
+      setWorkspace('')
+      setExistingProjects([])
+    })
   }, [])
 
   const handleCreateProject = async () => {
@@ -171,6 +163,27 @@ function EmptyState() {
       window.showToast('Failed to create project: ' + error, 'error')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const handleOpenProject = async (projectPath: string) => {
+    setIsOpening(true)
+    try {
+      const loaded = await window.electron.loadProject(projectPath)
+      setCurrentProject(loaded.project, projectPath)
+
+      const nodes = new Map<string, CanvasNode>((loaded.canvas?.nodes || []).map((node: CanvasNode) => [node.id, node]))
+      setNodes(nodes)
+      setZoom(loaded.canvas?.zoom ?? 1)
+      setViewport(loaded.canvas?.viewport ?? { x: 0, y: 0 })
+      deselectAll()
+
+      window.showToast('Project opened!', 'success')
+    } catch (error) {
+      console.error('Failed to open project:', error)
+      window.showToast('Failed to open project', 'error')
+    } finally {
+      setIsOpening(false)
     }
   }
 
@@ -209,6 +222,25 @@ function EmptyState() {
           <Plus className="mr-2 h-5 w-5" />
           {isCreating ? 'Creating...' : 'Create New Project'}
         </Button>
+
+        {existingProjects.length > 0 && (
+          <div className="mt-6 text-left">
+            <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Recent Projects</p>
+            <div className="space-y-2">
+              {existingProjects.slice(0, 5).map((project) => (
+                <button
+                  key={project.id}
+                  onClick={() => handleOpenProject(project.path)}
+                  disabled={isOpening}
+                  className="w-full rounded-lg border px-3 py-2 text-left transition-colors hover:bg-muted disabled:opacity-60"
+                >
+                  <div className="text-sm font-medium">{project.name}</div>
+                  <div className="text-xs text-muted-foreground break-all">{project.path}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

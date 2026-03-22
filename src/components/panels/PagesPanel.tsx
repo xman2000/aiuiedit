@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useProjectStore } from '@/store/useProjectStore'
 import { Button } from '@/components/common/Button'
-import { Plus, FileText, Trash2, ChevronRight, Settings } from 'lucide-react'
+import { Plus, FileText, Trash2, ChevronRight } from 'lucide-react'
 import type { Page } from '@/types'
 
 export function PagesPanel() {
-  const { currentProject, currentPage, setCurrentPage, addPage, removePage, updateProject } = useProjectStore()
+  const { currentProject, currentPage, setCurrentPage, addPage, removePage } = useProjectStore()
   const [isAdding, setIsAdding] = useState(false)
   const [newPageName, setNewPageName] = useState('')
 

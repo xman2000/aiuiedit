@@ -5,7 +5,8 @@ import { useAppStore } from '@/store/useAppStore'
 import { Button } from '@/components/common/Button'
 import { Send, Image as ImageIcon, Sparkles, ChevronUp, ChevronDown, Wand2, Settings } from 'lucide-react'
 import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
-import { AIService, createAIService } from '@/services/ai'
+import { createCanvasNode } from '@/core/canvasNodeFactory'
+import { createAIService } from '@/services/ai'
 import type { CanvasNode } from '@/types'
 
 interface Message {
@@ -29,7 +30,7 @@ export function ChatPanel() {
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { selectedIds, nodes, addNode, updateNode, deleteNode, pushHistory } = useCanvasStore()
-  const { currentProject, updateDesignSystem } = useProjectStore()
+  const { currentProject, setDirty } = useProjectStore()
   const { settings } = useAppStore()
   
   // Create AI service with current settings
@@ -100,24 +101,11 @@ export function ChatPanel() {
                   actions.push({
                     label: `Add ${component.name}`,
                     action: () => {
-                      const newNode: CanvasNode = {
-                        id: `node-${Date.now()}`,
-                        type: component.type,
-                        parentId: null,
-                        position: { x: 200, y: 200 },
-                        size: { 
-                          width: component.type === 'container' ? 300 : component.type === 'button' ? 120 : 200, 
-                          height: component.type === 'container' ? 200 : component.type === 'input' ? 40 : 'auto' as any
-                        },
-                        style: component.defaultStyle,
-                        props: component.defaultProps,
-                        children: [],
-                        name: component.name,
-                        locked: false,
-                        visible: true
-                      }
+                      const newNode = createCanvasNode(component.type, { x: 200, y: 200 })
+                      if (!newNode) return
+
                       addNode(newNode)
-                      pushHistory()
+                      setDirty(true)
                       window.showToast?.(`${component.name} added!`, 'success')
                     }
                   })
@@ -140,6 +128,7 @@ export function ChatPanel() {
                         })
                       })
                       pushHistory()
+                      setDirty(true)
                       window.showToast?.('Style updated!', 'success')
                     }
                   }
@@ -154,6 +143,7 @@ export function ChatPanel() {
                   action: () => {
                     selectedNodes.forEach(node => deleteNode(node.id))
                     pushHistory()
+                    setDirty(true)
                     window.showToast?.('Elements deleted!', 'success')
                   }
                 })
