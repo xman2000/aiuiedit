@@ -227,7 +227,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             srcDoc={snapshotDocument}
             title="Snapshot Preview"
             className="h-full w-full border-0"
-            sandbox="allow-same-origin allow-scripts allow-forms"
+            sandbox="allow-scripts allow-forms"
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center">
