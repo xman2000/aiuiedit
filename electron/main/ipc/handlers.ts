@@ -73,6 +73,46 @@ interface DiscoveredPage {
   framework: SupportedFramework
 }
 
+interface ImportCandidate {
+  root: string
+  framework: SupportedFramework
+  entryFile: string
+  pageCount: number
+  samplePages: Array<{ route: string; name: string; file: string }>
+}
+
+interface ImportAnalysisResult {
+  selectedRoot: string
+  candidates: ImportCandidate[]
+  recommendedCandidateIndex: number | null
+  logs: string[]
+  manualEntryHints: string[]
+  diagnostics: {
+    rootSignals: Record<string, boolean>
+    candidateRoots: string[]
+  }
+  reportPath?: string
+}
+
+interface ImportDebugReport {
+  generatedAt: string
+  selectedRoot: string
+  sourceRoot: string
+  framework: SupportedFramework
+  mode: 'auto' | 'plan' | 'manual'
+  entryFile: string
+  pageCount: number
+  mappingCount: number
+  pages: Array<{
+    id: string
+    name: string
+    route: string
+    framework: SupportedFramework
+    sourceFile: string
+  }>
+  analysis?: ImportAnalysisResult
+}
+
 const TAG_TO_COMPONENT: Record<string, string> = {
   h1: 'heading',
   h2: 'heading',
@@ -290,6 +330,77 @@ async function resolveImportTargets(selectedRoot: string): Promise<Array<{ root:
   }
 
   return resolved
+}
+
+async function buildImportAnalysis(selectedRoot: string): Promise<ImportAnalysisResult> {
+  const logs: string[] = []
+  logs.push(`Selected root: ${selectedRoot}`)
+
+  const rootSignals: Record<string, boolean> = {
+    artisan: await pathExists(join(selectedRoot, 'artisan')),
+    composerJson: await pathExists(join(selectedRoot, 'composer.json')),
+    routesWeb: await pathExists(join(selectedRoot, 'routes', 'web.php')),
+    nextConfig: await pathExists(join(selectedRoot, 'next.config.js')) || await pathExists(join(selectedRoot, 'next.config.mjs')) || await pathExists(join(selectedRoot, 'next.config.ts')),
+    viteConfig: await pathExists(join(selectedRoot, 'vite.config.js')) || await pathExists(join(selectedRoot, 'vite.config.ts')) || await pathExists(join(selectedRoot, 'vite.config.mjs')),
+    packageJson: await pathExists(join(selectedRoot, 'package.json')),
+    resourcesViews: await pathExists(join(selectedRoot, 'resources', 'views')),
+    resourcesJs: await pathExists(join(selectedRoot, 'resources', 'js'))
+  }
+  logs.push(`Root signals: ${JSON.stringify(rootSignals)}`)
+
+  const candidateRoots = await findLikelyAppRoots(selectedRoot)
+  logs.push(`Likely app roots: ${candidateRoots.length}`)
+
+  const targets = await resolveImportTargets(selectedRoot)
+  logs.push(`Detected ${targets.length} import target(s)`)
+
+  const candidates: ImportCandidate[] = []
+  for (const target of targets) {
+    const pages = await discoverSourcePages(target.root, target.framework, target.entryFile)
+    logs.push(`- ${target.framework} at ${target.root} (${pages.length} page candidates)`)
+
+    candidates.push({
+      root: target.root,
+      framework: target.framework,
+      entryFile: target.entryFile,
+      pageCount: pages.length,
+      samplePages: pages.slice(0, 8).map((page) => ({
+        route: page.route,
+        name: page.name,
+        file: relative(target.root, page.file)
+      }))
+    })
+  }
+
+  const manualEntryHints = targets.length === 0
+    ? (await findFilesInTree(selectedRoot, [
+      'routes/web.php',
+      '.blade.php',
+      'src/App.tsx',
+      'src/App.jsx',
+      'src/main.tsx',
+      'src/main.jsx',
+      'app/page.tsx',
+      'app/page.jsx',
+      'index.html'
+    ], 7, 40)).map((filePath) => relative(selectedRoot, filePath))
+    : []
+
+  if (manualEntryHints.length > 0) {
+    logs.push(`No direct target found. Generated ${manualEntryHints.length} manual entry hint(s).`)
+  }
+
+  return {
+    selectedRoot,
+    candidates,
+    recommendedCandidateIndex: candidates.length > 0 ? 0 : null,
+    logs,
+    manualEntryHints,
+    diagnostics: {
+      rootSignals,
+      candidateRoots
+    }
+  }
 }
 
 function viewNameToBladePath(sourceRoot: string, viewName: string): string {
@@ -860,6 +971,27 @@ async function getWorkspaceRoot(): Promise<string> {
   return AIUIEDIT_DIR
 }
 
+async function writeImportAnalysisReport(analysis: ImportAnalysisResult): Promise<string> {
+  await ensureaiuieditDir()
+  const cacheDir = join(AIUIEDIT_DIR, 'cache')
+  await fs.mkdir(cacheDir, { recursive: true })
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const reportPath = join(cacheDir, `import-analysis-${timestamp}.json`)
+  const latestPath = join(cacheDir, 'import-analysis-latest.json')
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    ...analysis
+  }
+
+  await Promise.all([
+    fs.writeFile(reportPath, JSON.stringify(payload, null, 2)),
+    fs.writeFile(latestPath, JSON.stringify(payload, null, 2))
+  ])
+
+  return reportPath
+}
+
 // Ensure aiuiedit directory exists
 async function ensureaiuieditDir() {
   try {
@@ -883,7 +1015,11 @@ export function setupIPC() {
     sourceRoot: string,
     entryFile: string,
     framework: SupportedFramework,
-    discoveredPagesOverride?: DiscoveredPage[]
+    discoveredPagesOverride?: DiscoveredPage[],
+    debugContext?: {
+      mode: 'auto' | 'plan' | 'manual'
+      analysis?: ImportAnalysisResult
+    }
   ) => {
     const workspaceRoot = await getWorkspaceRoot()
     const projectsDir = join(workspaceRoot, 'projects')
@@ -996,10 +1132,33 @@ export function setupIPC() {
       fs.writeFile(join(projectDir, '.aiuiedit', 'source-map.json'), JSON.stringify(manifest, null, 2))
     ])
 
+    const importDebugReport: ImportDebugReport = {
+      generatedAt: new Date().toISOString(),
+      selectedRoot: sourceRoot,
+      sourceRoot,
+      framework,
+      mode: debugContext?.mode || 'auto',
+      entryFile: entryRelative,
+      pageCount: pagesWithIds.length,
+      mappingCount: mappings.length,
+      pages: pagesWithIds.map((page) => ({
+        id: page.id,
+        name: page.name,
+        route: page.route,
+        framework: page.framework,
+        sourceFile: relative(sourceRoot, page.file)
+      })),
+      analysis: debugContext?.analysis
+    }
+
+    const importDebugPath = join(projectDir, '.aiuiedit', 'import-debug-report.json')
+    await fs.writeFile(importDebugPath, JSON.stringify(importDebugReport, null, 2))
+
     return {
       path: projectDir,
       project,
-      canvas
+      canvas,
+      importDebugPath
     }
   }
 
@@ -1214,6 +1373,9 @@ export function setupIPC() {
 
   // Import existing source project (round-trip bootstrap)
   ipcMain.handle('projects:import-source', async (_event, sourceRoot: string) => {
+    const analysis = await buildImportAnalysis(sourceRoot)
+    const analysisReportPath = await writeImportAnalysisReport(analysis)
+
     const targets = await resolveImportTargets(sourceRoot)
     if (targets.length === 0) {
       throw new Error('Could not detect an entry file. Select the app folder (for monorepos, choose the frontend package directory).')
@@ -1248,13 +1410,65 @@ export function setupIPC() {
     const primary = targets[0]
     const primaryFramework = new Set(targets.map((target) => target.framework)).size > 1 ? 'mixed' : primary.framework
 
-    return importSourceProject(sourceRoot, primary.entryFile, primaryFramework, uniquePages)
+    const imported = await importSourceProject(sourceRoot, primary.entryFile, primaryFramework, uniquePages, {
+      mode: 'auto',
+      analysis: {
+        ...analysis,
+        reportPath: analysisReportPath
+      }
+    })
+
+    return {
+      ...imported,
+      analysisReportPath
+    }
+  })
+
+  ipcMain.handle('projects:analyze-source', async (_event, sourceRoot: string) => {
+    const analysis = await buildImportAnalysis(sourceRoot)
+    const reportPath = await writeImportAnalysisReport(analysis)
+    return {
+      ...analysis,
+      reportPath
+    }
+  })
+
+  ipcMain.handle('projects:import-source-plan', async (
+    _event,
+    payload: {
+      selectedRoot: string
+      root: string
+      framework: SupportedFramework
+      entryFile: string
+    }
+  ) => {
+    const sourceRoot = payload.selectedRoot || payload.root
+    const root = payload.root || sourceRoot
+    const discoveredPages = await discoverSourcePages(root, payload.framework, payload.entryFile)
+
+    const rootedPages = discoveredPages.map((page) => {
+      const prefix = relative(sourceRoot, root).replace(/\\/g, '/')
+      return {
+        ...page,
+        name: prefix && prefix !== '.' ? `${prefix} / ${page.name}` : page.name,
+        route: prefix && prefix !== '.' && !page.route.startsWith('file:')
+          ? `${normalizeRoute(`/${prefix}`)}${page.route === '/' ? '' : page.route}`
+          : page.route
+      }
+    })
+
+    const imported = await importSourceProject(sourceRoot, payload.entryFile, payload.framework, rootedPages, {
+      mode: 'plan'
+    })
+    return imported
   })
 
   ipcMain.handle('projects:import-source-with-entry', async (_event, sourceRoot: string, entryFile: string) => {
     const detected = await detectFramework(sourceRoot)
     const framework = detected.framework === 'unknown' ? 'unknown' : detected.framework
-    return importSourceProject(sourceRoot, entryFile, framework)
+    return importSourceProject(sourceRoot, entryFile, framework, undefined, {
+      mode: 'manual'
+    })
   })
 
   // Load project

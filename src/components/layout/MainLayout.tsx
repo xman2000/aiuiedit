@@ -13,7 +13,7 @@ import { useCanvasStore } from '@/store/useCanvasStore'
 import { useAppStore } from '@/store/useAppStore'
 import { useKeyboardShortcuts } from '@/utils/shortcuts'
 import { Button } from '@/components/common/Button'
-import { FolderOpen, FolderUp, Plus } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, FolderOpen, FolderUp, Loader2, Plus, RotateCcw } from 'lucide-react'
 import { createCanvasNode } from '@/core/canvasNodeFactory'
 import type { CanvasNode } from '@/types'
 
@@ -130,6 +130,28 @@ function EmptyState() {
   const [isCreating, setIsCreating] = useState(false)
   const [isOpening, setIsOpening] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [isImportWizardOpen, setIsImportWizardOpen] = useState(false)
+  const [importRoot, setImportRoot] = useState('')
+  const [importAnalysis, setImportAnalysis] = useState<null | {
+    selectedRoot: string
+    candidates: Array<{
+      root: string
+      framework: 'nextjs' | 'react-vite' | 'laravel' | 'mixed' | 'unknown'
+      entryFile: string
+      pageCount: number
+      samplePages: Array<{ route: string; name: string; file: string }>
+    }>
+    recommendedCandidateIndex: number | null
+    logs: string[]
+    manualEntryHints: string[]
+    diagnostics: {
+      rootSignals: Record<string, boolean>
+      candidateRoots: string[]
+    }
+    reportPath?: string
+  }>(null)
+  const [selectedImportCandidateIndex, setSelectedImportCandidateIndex] = useState<number>(0)
+  const [manualEntryFile, setManualEntryFile] = useState<string>('')
   const [workspace, setWorkspace] = useState<string>('')
   const [existingProjects, setExistingProjects] = useState<Array<{ id: string; name: string; path: string; updatedAt?: string }>>([])
 
@@ -209,55 +231,101 @@ function EmptyState() {
   }
 
   const handleImportProject = async () => {
-    setIsImporting(true)
     try {
       const sourcePath = await window.electron.selectDirectory()
       if (!sourcePath) return
 
-      let imported: { path: string; project: any; canvas: any }
+      setImportRoot(sourcePath)
+      setImportAnalysis(null)
+      setManualEntryFile('')
+      setSelectedImportCandidateIndex(0)
+      setIsImportWizardOpen(true)
+      await analyzeImportRoot(sourcePath)
+    } catch (error) {
+      console.error('Failed to start import:', error)
+      window.showToast('Failed to start import', 'error')
+    }
+  }
 
-      try {
-        imported = await window.electron.importProjectFromSource(sourcePath)
-      } catch (error) {
-        const message = String(error)
-        const detectionFailed = message.includes('Could not detect an entry file')
+  const analyzeImportRoot = async (sourceRoot: string) => {
+    setIsImporting(true)
+    try {
+      const analysis = await window.electron.analyzeProjectSource(sourceRoot)
+      setImportAnalysis(analysis)
+      setSelectedImportCandidateIndex(analysis.recommendedCandidateIndex ?? 0)
+      if (analysis.reportPath) {
+        window.showToast(`Analysis report saved: ${analysis.reportPath}`, 'info')
+      }
+    } catch (error) {
+      console.error('Failed to analyze import root:', error)
+      window.showToast(`Import analysis failed: ${error}`, 'error')
+    } finally {
+      setIsImporting(false)
+    }
+  }
 
-        if (!detectionFailed) {
-          throw error
-        }
+  const hydrateImportedProject = async (imported: { path: string; project: any; canvas: any }) => {
+    setCurrentProject(imported.project, imported.path)
 
-        const selectedEntry = await window.electron.selectEntryFile(sourcePath)
-        if (!selectedEntry) {
-          window.showToast('Import canceled: no entry file selected', 'info')
-          return
-        }
+    const fallbackPageId = imported.project?.pages?.[0]?.id || 'page-1'
+    const nodes = new Map<string, CanvasNode>((imported.canvas?.nodes || []).map((node: CanvasNode) => [
+      node.id,
+      {
+        ...node,
+        pageId: node.pageId || fallbackPageId
+      }
+    ]))
+    setNodes(nodes)
+    setZoom(imported.canvas?.zoom ?? 1)
+    setViewport(imported.canvas?.viewport ?? { x: 0, y: 0 })
+    deselectAll()
 
-        imported = await window.electron.importProjectFromSourceWithEntry(sourcePath, selectedEntry)
+    await refreshProjects()
+  }
+
+  const executeImportFromWizard = async () => {
+    if (!importRoot) return
+
+    setIsImporting(true)
+    try {
+      let imported: { path: string; project: any; canvas: any; importDebugPath?: string; analysisReportPath?: string }
+      const candidate = importAnalysis?.candidates[selectedImportCandidateIndex]
+
+      if (candidate) {
+        imported = await window.electron.importProjectFromSourcePlan({
+          selectedRoot: importRoot,
+          root: candidate.root,
+          framework: candidate.framework,
+          entryFile: candidate.entryFile
+        })
+      } else if (manualEntryFile) {
+        imported = await window.electron.importProjectFromSourceWithEntry(importRoot, manualEntryFile)
+      } else {
+        window.showToast('Select a detected app target or choose an entry file', 'error')
+        return
       }
 
-      setCurrentProject(imported.project, imported.path)
-
-      const fallbackPageId = imported.project?.pages?.[0]?.id || 'page-1'
-      const nodes = new Map<string, CanvasNode>((imported.canvas?.nodes || []).map((node: CanvasNode) => [
-        node.id,
-        {
-          ...node,
-          pageId: node.pageId || fallbackPageId
-        }
-      ]))
-      setNodes(nodes)
-      setZoom(imported.canvas?.zoom ?? 1)
-      setViewport(imported.canvas?.viewport ?? { x: 0, y: 0 })
-      deselectAll()
-
-      await refreshProjects()
-
-      window.showToast('Project imported. Round-trip mapping initialized.', 'success')
+      await hydrateImportedProject(imported)
+      setIsImportWizardOpen(false)
+      setImportAnalysis(null)
+      setManualEntryFile('')
+      if (imported.importDebugPath) {
+        window.showToast(`Import complete. Debug report: ${imported.importDebugPath}`, 'success')
+      } else {
+        window.showToast('Project imported. Round-trip mapping initialized.', 'success')
+      }
     } catch (error) {
       console.error('Failed to import project:', error)
       window.showToast(`Import failed: ${error}`, 'error')
     } finally {
       setIsImporting(false)
+    }
+  }
+
+  const handleChooseManualEntryFile = async () => {
+    const selected = await window.electron.selectEntryFile(importRoot)
+    if (selected) {
+      setManualEntryFile(selected)
     }
   }
 
@@ -353,6 +421,145 @@ function EmptyState() {
           </div>
         )}
       </div>
+
+      {isImportWizardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4">
+          <div className="w-full max-w-3xl rounded-xl border bg-card p-5 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold">Import Wizard</h3>
+                <p className="text-sm text-muted-foreground">
+                  We scan your project root, detect app targets, and import pages into a browsable tree.
+                </p>
+              </div>
+              <Button variant="ghost" onClick={() => setIsImportWizardOpen(false)}>Close</Button>
+            </div>
+
+            <div className="mb-4 rounded-md border bg-muted/40 p-3">
+              <p className="text-xs uppercase tracking-wider text-muted-foreground">Selected Root</p>
+              <p className="mt-1 break-all text-sm">{importRoot}</p>
+              <div className="mt-2 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    const selected = await window.electron.selectDirectory()
+                    if (!selected) return
+                    setImportRoot(selected)
+                    setImportAnalysis(null)
+                    setManualEntryFile('')
+                    await analyzeImportRoot(selected)
+                  }}
+                >
+                  Change Root Folder
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => analyzeImportRoot(importRoot)} disabled={isImporting}>
+                  <RotateCcw className="mr-1 h-4 w-4" />
+                  Re-scan
+                </Button>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-md border p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Detected App Targets</p>
+
+                {isImporting && !importAnalysis ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Scanning project structure...
+                  </div>
+                ) : importAnalysis && importAnalysis.candidates.length > 0 ? (
+                  <div className="space-y-2">
+                    {importAnalysis.candidates.map((candidate, index) => (
+                      <label key={`${candidate.root}-${candidate.entryFile}`} className="block cursor-pointer rounded-md border p-2 hover:bg-muted/40">
+                        <div className="flex items-start gap-2">
+                          <input
+                            type="radio"
+                            name="import-candidate"
+                            checked={selectedImportCandidateIndex === index}
+                            onChange={() => setSelectedImportCandidateIndex(index)}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium">{candidate.framework} - {candidate.pageCount} pages</p>
+                            <p className="truncate text-xs text-muted-foreground">root: {candidate.root}</p>
+                            <p className="truncate text-xs text-muted-foreground">entry: {candidate.entryFile}</p>
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700">
+                    <div className="mb-1 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      No import targets were auto-detected.
+                    </div>
+                    <p className="text-xs">Use manual entry selection below.</p>
+                  </div>
+                )}
+
+                <div className="mt-3 border-t pt-3">
+                  <Button variant="outline" size="sm" onClick={handleChooseManualEntryFile}>
+                    Choose Entry File Manually
+                  </Button>
+                  {manualEntryFile && (
+                    <p className="mt-2 break-all text-xs text-muted-foreground">Manual entry: {manualEntryFile}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-md border p-3">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Detection Log</p>
+                <div className="h-52 overflow-auto rounded-md border bg-muted/20 p-2 text-xs">
+                  {(importAnalysis?.logs?.length ? importAnalysis.logs : ['Waiting for scan...']).map((line, index) => (
+                    <div key={`${line}-${index}`} className="mb-1 font-mono">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+
+                {importAnalysis?.reportPath && (
+                  <p className="mt-2 break-all text-[11px] text-muted-foreground">
+                    Analysis report: {importAnalysis.reportPath}
+                  </p>
+                )}
+
+                {importAnalysis?.diagnostics && (
+                  <div className="mt-2 rounded-md border bg-muted/20 p-2">
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Root Signals</p>
+                    <div className="space-y-0.5 text-[11px] text-muted-foreground">
+                      {Object.entries(importAnalysis.diagnostics.rootSignals).map(([signal, value]) => (
+                        <div key={signal}>{signal}: {value ? 'yes' : 'no'}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {importAnalysis?.manualEntryHints?.length ? (
+                  <div className="mt-2 rounded-md border bg-muted/20 p-2">
+                    <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Hints</p>
+                    <div className="max-h-24 overflow-auto text-xs text-muted-foreground">
+                      {importAnalysis.manualEntryHints.slice(0, 12).map((hint) => (
+                        <div key={hint} className="truncate">{hint}</div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2 border-t pt-4">
+              <Button variant="outline" onClick={() => setIsImportWizardOpen(false)} disabled={isImporting}>Cancel</Button>
+              <Button onClick={executeImportFromWizard} disabled={isImporting || (!manualEntryFile && !(importAnalysis?.candidates?.length))}>
+                {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                Import Project
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

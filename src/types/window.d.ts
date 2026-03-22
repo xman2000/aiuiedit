@@ -16,8 +16,32 @@ declare global {
       loadSettings: () => Promise<any>
       listProjects: () => Promise<any[]>
       createProject: (name: string) => Promise<any>
-      importProjectFromSource: (sourceRoot: string) => Promise<{ path: string; project: any; canvas: any }>
-      importProjectFromSourceWithEntry: (sourceRoot: string, entryFile: string) => Promise<{ path: string; project: any; canvas: any }>
+      importProjectFromSource: (sourceRoot: string) => Promise<{ path: string; project: any; canvas: any; importDebugPath?: string; analysisReportPath?: string }>
+      analyzeProjectSource: (sourceRoot: string) => Promise<{
+        selectedRoot: string
+        candidates: Array<{
+          root: string
+          framework: 'nextjs' | 'react-vite' | 'laravel' | 'mixed' | 'unknown'
+          entryFile: string
+          pageCount: number
+          samplePages: Array<{ route: string; name: string; file: string }>
+        }>
+        recommendedCandidateIndex: number | null
+        logs: string[]
+        manualEntryHints: string[]
+        diagnostics: {
+          rootSignals: Record<string, boolean>
+          candidateRoots: string[]
+        }
+        reportPath?: string
+      }>
+      importProjectFromSourcePlan: (payload: {
+        selectedRoot: string
+        root: string
+        framework: 'nextjs' | 'react-vite' | 'laravel' | 'mixed' | 'unknown'
+        entryFile: string
+      }) => Promise<{ path: string; project: any; canvas: any; importDebugPath?: string }>
+      importProjectFromSourceWithEntry: (sourceRoot: string, entryFile: string) => Promise<{ path: string; project: any; canvas: any; importDebugPath?: string }>
       refreshProjectFromSource: (projectPath: string) => Promise<{ project: any; canvas: any }>
       loadProject: (path: string) => Promise<{ project: any; canvas: any }>
       saveProject: (path: string, data: any) => Promise<boolean>
