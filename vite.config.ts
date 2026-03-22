@@ -3,10 +3,26 @@ import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 import renderer from 'vite-plugin-electron-renderer'
 import { resolve } from 'path'
+import { copyFileSync, mkdirSync } from 'fs'
+
+// Custom plugin to copy preload script without processing
+const copyPreloadPlugin = () => ({
+  name: 'copy-preload',
+  buildStart() {
+    try {
+      mkdirSync('dist-electron/preload', { recursive: true })
+      copyFileSync('electron/preload/index.cjs', 'dist-electron/preload/index.cjs')
+      console.log('Preload script copied successfully')
+    } catch (err) {
+      console.error('Failed to copy preload:', err)
+    }
+  }
+})
 
 export default defineConfig({
   plugins: [
     react(),
+    copyPreloadPlugin(),
     electron([
       {
         // Main process entry
@@ -21,27 +37,6 @@ export default defineConfig({
             outDir: 'dist-electron/main',
             rollupOptions: {
               external: ['electron']
-            }
-          }
-        }
-      },
-      {
-        // Preload script entry
-        entry: 'electron/preload/index.ts',
-        onstart(options) {
-          options.reload()
-        },
-        vite: {
-          build: {
-            sourcemap: true,
-            minify: process.env.NODE_ENV === 'production',
-            outDir: 'dist-electron/preload',
-            rollupOptions: {
-              external: ['electron'],
-              output: {
-                entryFileNames: 'index.cjs',
-                format: 'cjs'
-              }
             }
           }
         }
