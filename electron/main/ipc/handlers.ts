@@ -8,7 +8,7 @@ import { getMainWindow } from '../index.js'
 const AIUIEDIT_DIR = join(homedir(), 'aiuiedit')
 const SETTINGS_FILE = join(AIUIEDIT_DIR, 'settings.json')
 
-type SupportedFramework = 'nextjs' | 'react-vite' | 'unknown'
+type SupportedFramework = 'nextjs' | 'react-vite' | 'laravel' | 'unknown'
 
 interface SourceMappingItem {
   nodeId: string
@@ -260,6 +260,34 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
     return { framework: 'react-vite', entryFile: discoveredViteEntry }
   }
 
+  const laravelSignals = await findFirstExisting([
+    join(sourceRoot, 'artisan'),
+    join(sourceRoot, 'composer.json')
+  ])
+
+  const laravelEntry = await findFirstExisting([
+    join(sourceRoot, 'resources', 'views', 'welcome.blade.php'),
+    join(sourceRoot, 'resources', 'views', 'home.blade.php'),
+    join(sourceRoot, 'resources', 'views', 'layouts', 'app.blade.php'),
+    join(sourceRoot, 'resources', 'views', 'app.blade.php')
+  ])
+
+  if (laravelSignals || laravelEntry) {
+    if (laravelEntry) {
+      return { framework: 'laravel', entryFile: laravelEntry }
+    }
+
+    const discoveredLaravelEntry = await findFirstFileInTree(sourceRoot, [
+      'resources/views/welcome.blade.php',
+      'resources/views/home.blade.php',
+      'resources/views/layouts/app.blade.php',
+      'resources/views/app.blade.php',
+      '.blade.php'
+    ])
+
+    return { framework: 'laravel', entryFile: discoveredLaravelEntry }
+  }
+
   const staticEntry = await findFirstExisting([
     join(sourceRoot, 'index.html'),
     join(sourceRoot, 'public', 'index.html')
@@ -283,7 +311,9 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
     'app/page.js',
     'src/app/page.tsx',
     'src/app/page.jsx',
-    'src/app/page.js'
+    'src/app/page.js',
+    'resources/views/welcome.blade.php',
+    '.blade.php'
   ])
 
   return { framework: 'unknown', entryFile: discoveredGenericEntry }
@@ -689,7 +719,7 @@ export function setupIPC() {
       filters: [
         {
           name: 'Web Source Files',
-          extensions: ['tsx', 'ts', 'jsx', 'js', 'html']
+          extensions: ['tsx', 'ts', 'jsx', 'js', 'html', 'php']
         }
       ]
     })

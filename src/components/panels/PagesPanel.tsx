@@ -53,6 +53,7 @@ export function PagesPanel() {
   const syncPageToSource = async (page: Page) => {
     const shouldSync =
       currentProject?.source?.roundTrip &&
+      currentProject?.source?.framework === 'nextjs' &&
       projectPath
 
     if (!shouldSync) return
