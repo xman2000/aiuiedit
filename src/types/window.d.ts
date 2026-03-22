@@ -73,7 +73,13 @@ declare global {
         url: string
         title: string
         html: string
-        blocks: Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }>
+        blocks: Array<{
+          type: 'heading' | 'text' | 'button' | 'link' | 'image' | 'card'
+          text: string
+          src?: string
+          href?: string
+          className?: string
+        }>
       }>
     }
     showToast: (message: string, type?: 'success' | 'error' | 'info') => void

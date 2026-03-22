@@ -122,8 +122,11 @@ interface PreviewCaptureResult {
   title: string
   html: string
   blocks: Array<{
-    type: 'heading' | 'text' | 'button' | 'link'
+    type: 'heading' | 'text' | 'button' | 'link' | 'image' | 'card'
     text: string
+    src?: string
+    href?: string
+    className?: string
   }>
 }
 
@@ -194,44 +197,76 @@ function htmlToText(value: string): string {
     .trim()
 }
 
+function readAttr(attrs: string, name: string): string {
+  const match = attrs.match(new RegExp(`\\s${name}\\s*=\\s*["']([^"']+)["']`, 'i'))
+  return match?.[1] || ''
+}
+
+function looksLikeCardClass(className: string): boolean {
+  return /(card|panel|shadow|rounded|border|bg-|tile|hero|banner|public-)/i.test(className)
+}
+
 function extractRenderedPreviewBlocks(html: string): PreviewCaptureResult['blocks'] {
   const blocks: PreviewCaptureResult['blocks'] = []
+  const seen = new Set<string>()
 
-  const headingRegex = /<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi
+  const pushBlock = (block: PreviewCaptureResult['blocks'][number]) => {
+    const key = `${block.type}|${(block.text || '').slice(0, 80)}|${block.src || ''}|${block.href || ''}`
+    if (seen.has(key)) return
+    seen.add(key)
+    blocks.push(block)
+  }
+
+  const cleanedHtml = html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
+
+  const tokenRegex = /<(h[1-3]|p|button|a|section|article|div)\b([^>]*)>([\s\S]*?)<\/\1>|<(img)\b([^>]*)\/?>/gi
   let match: RegExpExecArray | null
-  while ((match = headingRegex.exec(html)) !== null) {
-    const text = htmlToText(match[2])
-    if (text.length >= 3) {
-      blocks.push({ type: 'heading', text })
-    }
-    if (blocks.length >= 40) return blocks
-  }
 
-  const paragraphRegex = /<p\b[^>]*>([\s\S]*?)<\/p>/gi
-  while ((match = paragraphRegex.exec(html)) !== null) {
-    const text = htmlToText(match[1])
-    if (text.length >= 16) {
-      blocks.push({ type: 'text', text })
-    }
-    if (blocks.length >= 80) return blocks
-  }
+  while ((match = tokenRegex.exec(cleanedHtml)) !== null) {
+    const tag = (match[1] || match[4] || '').toLowerCase()
 
-  const buttonRegex = /<button\b[^>]*>([\s\S]*?)<\/button>/gi
-  while ((match = buttonRegex.exec(html)) !== null) {
-    const text = htmlToText(match[1])
-    if (text.length >= 2) {
-      blocks.push({ type: 'button', text })
+    if (tag === 'img') {
+      const attrs = match[5] || ''
+      const src = readAttr(attrs, 'src')
+      if (!src) continue
+      const alt = htmlToText(readAttr(attrs, 'alt') || 'Image')
+      const className = readAttr(attrs, 'class')
+      pushBlock({ type: 'image', text: alt, src, className })
+      if (blocks.length >= 160) return blocks
+      continue
     }
-    if (blocks.length >= 100) return blocks
-  }
 
-  const linkRegex = /<a\b[^>]*>([\s\S]*?)<\/a>/gi
-  while ((match = linkRegex.exec(html)) !== null) {
-    const text = htmlToText(match[1])
-    if (text.length >= 3) {
-      blocks.push({ type: 'link', text })
+    const attrs = match[2] || ''
+    const inner = match[3] || ''
+    const className = readAttr(attrs, 'class')
+    const text = htmlToText(inner)
+
+    if (tag.startsWith('h')) {
+      if (text.length >= 3) {
+        pushBlock({ type: 'heading', text, className })
+      }
+    } else if (tag === 'p') {
+      if (text.length >= 20) {
+        pushBlock({ type: 'text', text, className })
+      }
+    } else if (tag === 'button') {
+      if (text.length >= 2) {
+        pushBlock({ type: 'button', text, className })
+      }
+    } else if (tag === 'a') {
+      const href = readAttr(attrs, 'href')
+      if (text.length >= 3) {
+        pushBlock({ type: 'link', text, href, className })
+      }
+    } else if ((tag === 'section' || tag === 'article' || tag === 'div') && looksLikeCardClass(className)) {
+      if (text.length >= 28) {
+        pushBlock({ type: 'card', text: text.slice(0, 280), className })
+      }
     }
-    if (blocks.length >= 120) return blocks
+
+    if (blocks.length >= 160) return blocks
   }
 
   return blocks

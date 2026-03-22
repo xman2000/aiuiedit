@@ -9,7 +9,13 @@ interface RenderedPreviewProps {
   currentPage: Page | null
   onCaptureBlocks?: (payload: {
     title: string
-    blocks: Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }>
+    blocks: Array<{
+      type: 'heading' | 'text' | 'button' | 'link' | 'image' | 'card'
+      text: string
+      src?: string
+      href?: string
+      className?: string
+    }>
   }) => void
 }
 
@@ -37,7 +43,13 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false)
   const [snapshotHtml, setSnapshotHtml] = useState('')
   const [snapshotTitle, setSnapshotTitle] = useState('Rendered Page')
-  const [snapshotBlocks, setSnapshotBlocks] = useState<Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }>>([])
+  const [snapshotBlocks, setSnapshotBlocks] = useState<Array<{
+    type: 'heading' | 'text' | 'button' | 'link' | 'image' | 'card'
+    text: string
+    src?: string
+    href?: string
+    className?: string
+  }>>([])
   const [previewMode, setPreviewMode] = useState<PreviewMode>('embedded')
   const [statusMessage, setStatusMessage] = useState('')
   const [embeddedLoaded, setEmbeddedLoaded] = useState(false)

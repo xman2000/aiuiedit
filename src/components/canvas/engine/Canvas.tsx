@@ -104,7 +104,16 @@ export function Canvas() {
     useCanvasStore.getState().selectNode(newNode.id)
   }, [currentProject, currentPage, addNode, setDirty])
 
-  const applyRenderedCapture = useCallback((payload: { title: string; blocks: Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }> }) => {
+  const applyRenderedCapture = useCallback((payload: {
+    title: string
+    blocks: Array<{
+      type: 'heading' | 'text' | 'button' | 'link' | 'image' | 'card'
+      text: string
+      src?: string
+      href?: string
+      className?: string
+    }>
+  }) => {
     if (!currentPage) return
 
     const keptNodes = Array.from(nodes.values()).filter((node) => node.pageId !== currentPage.id)
@@ -137,10 +146,51 @@ export function Canvas() {
     nextNodes.set(headingNode.id, headingNode as CanvasNode)
     y += 80
 
-    payload.blocks.slice(0, 40).forEach((block) => {
+    const chooseTextColor = (className?: string): string => {
+      const classes = (className || '').toLowerCase()
+      if (classes.includes('text-white') || classes.includes('text-stone-50')) return '#FFFFFF'
+      if (classes.includes('text-stone-600') || classes.includes('text-muted')) return '#4B5563'
+      return '#111827'
+    }
+
+    const chooseBackground = (className?: string): string | undefined => {
+      const classes = (className || '').toLowerCase()
+      if (classes.includes('bg-brand-700') || classes.includes('bg-blue-') || classes.includes('bg-indigo-') || classes.includes('bg-primary')) {
+        return '#1D4ED8'
+      }
+      if (classes.includes('bg-stone-900') || classes.includes('bg-gray-900')) return '#111827'
+      if (classes.includes('bg-white')) return '#FFFFFF'
+      return undefined
+    }
+
+    const isDarkBackground = (hex?: string): boolean => {
+      if (!hex) return false
+      const normalized = hex.toLowerCase()
+      return ['#111827', '#1d4ed8'].includes(normalized)
+    }
+
+    payload.blocks.slice(0, 60).forEach((block) => {
       const id = makeNodeId()
       const isHeading = block.type === 'heading'
-      const type = isHeading ? 'heading' : block.type === 'button' ? 'button' : block.type === 'link' ? 'link' : 'text'
+      const type =
+        isHeading
+          ? 'heading'
+          : block.type === 'button'
+            ? 'button'
+            : block.type === 'link'
+              ? 'link'
+              : block.type === 'image'
+                ? 'image'
+                : block.type === 'card'
+                  ? 'card'
+                  : 'text'
+
+      const className = block.className || ''
+      const backgroundFromClass = chooseBackground(className)
+      const textColorFromClass = chooseTextColor(className)
+      const resolvedTextColor = isDarkBackground(backgroundFromClass) && textColorFromClass !== '#FFFFFF'
+        ? '#FFFFFF'
+        : textColorFromClass
 
       const node = {
         id,
@@ -148,24 +198,52 @@ export function Canvas() {
         pageId: currentPage.id,
         parentId: null,
         position: { x: 32, y },
-        size: { width: 760, height: isHeading ? 50 : type === 'button' ? 44 : 42 },
+        size: {
+          width: type === 'button' ? 260 : 760,
+          height:
+            type === 'image'
+              ? 320
+              : type === 'card'
+                ? 170
+                : isHeading
+                  ? 50
+                  : type === 'button'
+                    ? 44
+                    : 42
+        },
         style: type === 'button'
           ? {
-              backgroundColor: '#2563EB',
+              backgroundColor: backgroundFromClass || '#1D4ED8',
               color: '#FFFFFF',
               borderRadius: '8px',
               border: 'none',
               padding: '10px 14px',
-              width: '220px'
+              width: '260px',
+              fontWeight: '600'
             }
           : type === 'link'
             ? {
-                color: '#1D4ED8',
+                color: resolvedTextColor === '#FFFFFF' ? '#FFFFFF' : '#1D4ED8',
                 textDecoration: 'underline',
                 fontSize: '16px'
               }
+            : type === 'image'
+              ? {
+                  borderRadius: '10px',
+                  border: '1px solid #D1D5DB',
+                  objectFit: 'cover'
+                }
+              : type === 'card'
+                ? {
+                    backgroundColor: backgroundFromClass || '#FFFFFF',
+                    color: resolvedTextColor,
+                    borderRadius: '10px',
+                    border: '1px solid #D1D5DB',
+                    padding: '12px',
+                    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)'
+                  }
             : {
-                color: '#111827',
+                color: resolvedTextColor,
                 fontSize: isHeading ? '24px' : '16px',
                 lineHeight: '1.45'
               },
@@ -176,7 +254,11 @@ export function Canvas() {
               ? { content: block.text }
               : type === 'button'
                 ? { text: block.text }
-                : { text: block.text, href: '#' },
+                : type === 'image'
+                  ? { src: block.src || '', alt: block.text || 'Image' }
+                  : type === 'card'
+                    ? { title: block.text.slice(0, 80) || 'Card' }
+                    : { text: block.text, href: block.href || '#' },
         children: [],
         name: type[0].toUpperCase() + type.slice(1),
         locked: false,
@@ -184,7 +266,7 @@ export function Canvas() {
       }
 
       nextNodes.set(id, node as CanvasNode)
-      y += isHeading ? 64 : 56
+      y += type === 'image' ? 340 : type === 'card' ? 190 : isHeading ? 64 : 56
     })
 
     setNodes(nextNodes)
