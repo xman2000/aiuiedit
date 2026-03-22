@@ -120,6 +120,7 @@ interface PreviewCapturePayload {
 interface PreviewCaptureResult {
   url: string
   title: string
+  html: string
   blocks: Array<{
     type: 'heading' | 'text' | 'button' | 'link'
     text: string
@@ -1273,10 +1274,12 @@ export function setupIPC() {
       const titleMatch = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)
       const title = titleMatch ? htmlToText(titleMatch[1]) : 'Rendered Page'
       const blocks = extractRenderedPreviewBlocks(html)
+      const htmlPayload = html.length > 1_500_000 ? html.slice(0, 1_500_000) : html
 
       return {
         url: payload.url,
         title,
+        html: htmlPayload,
         blocks
       }
     } catch (error: any) {

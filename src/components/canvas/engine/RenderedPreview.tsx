@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { Download, ExternalLink, RefreshCcw } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
@@ -13,10 +13,20 @@ interface RenderedPreviewProps {
   }) => void
 }
 
+type PreviewMode = 'embedded' | 'snapshot'
+
 function joinPreviewUrl(base: string, route: string): string {
   const normalizedBase = base.trim().replace(/\/+$/, '')
   const normalizedRoute = route.startsWith('/') ? route : `/${route}`
   return `${normalizedBase}${normalizedRoute}`
+}
+
+function injectBaseTag(html: string, url: string): string {
+  const baseTag = `<base href="${url.replace(/"/g, '&quot;')}" />`
+  if (/<head\b[^>]*>/i.test(html)) {
+    return html.replace(/<head\b[^>]*>/i, (match) => `${match}${baseTag}`)
+  }
+  return `<!doctype html><html><head>${baseTag}</head><body>${html}</body></html>`
 }
 
 export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }: RenderedPreviewProps) {
@@ -24,6 +34,14 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [draftBaseUrl, setDraftBaseUrl] = useState(settings.livePreviewBaseUrl || 'http://127.0.0.1:8000')
   const [refreshToken, setRefreshToken] = useState(0)
   const [isCapturing, setIsCapturing] = useState(false)
+  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false)
+  const [snapshotHtml, setSnapshotHtml] = useState('')
+  const [snapshotTitle, setSnapshotTitle] = useState('Rendered Page')
+  const [snapshotBlocks, setSnapshotBlocks] = useState<Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }>>([])
+  const [previewMode, setPreviewMode] = useState<PreviewMode>('embedded')
+  const [statusMessage, setStatusMessage] = useState('')
+  const [embeddedLoaded, setEmbeddedLoaded] = useState(false)
+  const timeoutRef = useRef<number | null>(null)
 
   const route = currentPage?.route || '/'
   const isRoutePreviewable = route.startsWith('/')
@@ -34,30 +52,29 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
     return joinPreviewUrl(base, route)
   }, [settings.livePreviewBaseUrl, route, isRoutePreviewable])
 
+  const snapshotDocument = useMemo(() => {
+    if (!snapshotHtml || !previewUrl) return ''
+    return injectBaseTag(snapshotHtml, previewUrl)
+  }, [snapshotHtml, previewUrl])
+
   const hints = useMemo(() => {
     const framework = currentProject?.source?.framework
     if (framework === 'laravel') {
       return [
         'Start your app first: `php artisan serve`',
         'If using Vite assets, also run: `npm run dev`',
-        'Set Live Preview Base URL to your Laravel server (default: http://127.0.0.1:8000)'
+        'If embedded mode stays blank, switch to Snapshot mode (bypasses frame restrictions).'
       ]
     }
     if (framework === 'nextjs') {
       return [
         'Start your app first: `npm run dev`',
-        'Set Live Preview Base URL to your Next.js dev URL (for example: http://127.0.0.1:3000)'
-      ]
-    }
-    if (framework === 'react-vite') {
-      return [
-        'Start your app first: `npm run dev`',
-        'Set Live Preview Base URL to your Vite URL (for example: http://127.0.0.1:5173)'
+        'Set Live Preview Base URL to your Next.js dev URL (for example: http://127.0.0.1:3000).'
       ]
     }
     return [
       'Start your app locally in your normal dev environment.',
-      'Set Live Preview Base URL to where your app is running (for example: http://127.0.0.1:8000).'
+      'If embedded mode is blank, use Snapshot mode and Capture to Canvas.'
     ]
   }, [currentProject?.source?.framework])
 
@@ -69,19 +86,64 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
     await window.electron.saveSettings(nextSettings)
   }
 
-  const handleCaptureSnapshot = async () => {
-    if (!previewUrl || !onCaptureBlocks) return
+  const loadSnapshot = async () => {
+    if (!previewUrl) return
+    setIsLoadingSnapshot(true)
+    try {
+      const captured = await window.electron.capturePreviewRoute({ url: previewUrl })
+      setSnapshotHtml(captured.html)
+      setSnapshotTitle(captured.title)
+      setSnapshotBlocks(captured.blocks)
+      setStatusMessage(`Snapshot loaded: ${captured.blocks.length} content blocks detected`)
+    } catch (error) {
+      console.error('Snapshot load failed:', error)
+      setStatusMessage(`Snapshot failed: ${error}`)
+    } finally {
+      setIsLoadingSnapshot(false)
+    }
+  }
+
+  useEffect(() => {
+    setEmbeddedLoaded(false)
+    if (!previewUrl) return
+
+    loadSnapshot()
+
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current)
+    }
+
+    timeoutRef.current = window.setTimeout(() => {
+      if (!embeddedLoaded && previewMode === 'embedded') {
+        setStatusMessage('Embedded preview appears blocked or unavailable; switched to Snapshot mode.')
+        setPreviewMode('snapshot')
+      }
+    }, 6000)
+
+    return () => {
+      if (timeoutRef.current) {
+        window.clearTimeout(timeoutRef.current)
+        timeoutRef.current = null
+      }
+    }
+  }, [previewUrl, refreshToken])
+
+  const handleCaptureToCanvas = async () => {
+    if (!onCaptureBlocks) return
 
     setIsCapturing(true)
     try {
-      const captured = await window.electron.capturePreviewRoute({ url: previewUrl })
+      if (!snapshotBlocks.length) {
+        await loadSnapshot()
+      }
+
       onCaptureBlocks({
-        title: captured.title,
-        blocks: captured.blocks
+        title: snapshotTitle,
+        blocks: snapshotBlocks
       })
-      window.showToast(`Captured ${captured.blocks.length} blocks from rendered page`, 'success')
+      window.showToast(`Captured ${snapshotBlocks.length} blocks from rendered page`, 'success')
     } catch (error) {
-      console.error('Preview capture failed:', error)
+      console.error('Capture failed:', error)
       window.showToast(`Capture failed: ${error}`, 'error')
     } finally {
       setIsCapturing(false)
@@ -101,11 +163,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                if (previewUrl) {
-                  window.electron.openExternal(previewUrl)
-                }
-              }}
+              onClick={() => previewUrl && window.electron.openExternal(previewUrl)}
               disabled={!previewUrl}
             >
               <ExternalLink className="mr-1 h-4 w-4" />
@@ -114,8 +172,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             <Button
               variant="outline"
               size="sm"
-              onClick={handleCaptureSnapshot}
-              disabled={!previewUrl || isCapturing || !onCaptureBlocks}
+              onClick={handleCaptureToCanvas}
+              disabled={!previewUrl || isCapturing || isLoadingSnapshot || !onCaptureBlocks}
             >
               <Download className="mr-1 h-4 w-4" />
               {isCapturing ? 'Capturing...' : 'Capture to Canvas'}
@@ -133,33 +191,53 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
           />
           <Button size="sm" onClick={saveBaseUrl}>Use URL</Button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">Route: {route}</p>
+
+        <div className="mt-2 flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">Route: {route}</p>
+          <div className="rounded-md border bg-muted/30 p-0.5">
+            <Button size="sm" variant={previewMode === 'embedded' ? 'default' : 'ghost'} className="h-7" onClick={() => setPreviewMode('embedded')}>
+              Embedded
+            </Button>
+            <Button size="sm" variant={previewMode === 'snapshot' ? 'default' : 'ghost'} className="h-7" onClick={() => setPreviewMode('snapshot')}>
+              Snapshot
+            </Button>
+          </div>
+        </div>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden bg-white">
         {!isRoutePreviewable ? (
           <div className="flex h-full items-center justify-center p-6 text-center">
-            <div>
-              <p className="text-sm font-medium">This page does not map to a browser route</p>
-              <p className="mt-1 text-xs text-muted-foreground">The selected page is file-based and cannot be opened directly in live preview.</p>
-            </div>
+            <p className="text-sm text-muted-foreground">This page does not map to a browser route.</p>
           </div>
-        ) : previewUrl ? (
+        ) : previewMode === 'embedded' ? (
           <iframe
-            key={`${previewUrl}-${refreshToken}`}
+            key={`embedded-${previewUrl}-${refreshToken}`}
             src={previewUrl}
-            title="Live Preview"
-            className="h-full w-full border-0 bg-white"
-            sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals"
+            title="Embedded Live Preview"
+            className="h-full w-full border-0"
+            onLoad={() => {
+              setEmbeddedLoaded(true)
+              setStatusMessage('Embedded preview loaded')
+            }}
+          />
+        ) : snapshotDocument ? (
+          <iframe
+            key={`snapshot-${previewUrl}-${refreshToken}`}
+            srcDoc={snapshotDocument}
+            title="Snapshot Preview"
+            className="h-full w-full border-0"
+            sandbox="allow-same-origin allow-scripts allow-forms"
           />
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center">
-            <p className="text-sm text-muted-foreground">Set a valid Live Preview Base URL to render this page.</p>
+            <p className="text-sm text-muted-foreground">Loading snapshot preview...</p>
           </div>
         )}
       </div>
 
       <div className="border-t bg-card px-3 py-2 text-xs text-muted-foreground">
+        {statusMessage && <div className="mb-1">{statusMessage}</div>}
         {hints.map((hint) => (
           <div key={hint}>{hint}</div>
         ))}

@@ -72,6 +72,7 @@ declare global {
       }) => Promise<{
         url: string
         title: string
+        html: string
         blocks: Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }>
       }>
     }
