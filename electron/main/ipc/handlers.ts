@@ -784,7 +784,7 @@ async function discoverSourcePages(sourceRoot: string, framework: SupportedFrame
 }
 
 function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: string, pageId: string): { nodes: ImportedNode[]; mappings: SourceMappingItem[] } {
-  const elementRegex = /<([a-zA-Z][a-zA-Z0-9:-]*)\b([^>]*)>([\s\S]*?)<\/\1>|<([a-zA-Z][a-zA-Z0-9:-]*)\b([^>]*)\/>/g
+  const elementRegex = /<([a-zA-Z][a-zA-Z0-9:._-]*)\b([^>]*)>([\s\S]*?)<\/\1>|<([a-zA-Z][a-zA-Z0-9:._-]*)\b([^>]*)\/>/g
   const nodes: ImportedNode[] = []
   const mappings: SourceMappingItem[] = []
   let match: RegExpExecArray | null
@@ -797,7 +797,8 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     const innerHtml = match[3] || ''
     if (tag === 'script' || tag === 'style') continue
 
-    const componentType = TAG_TO_COMPONENT[tag] || (tag.startsWith('x-') ? 'container' : undefined)
+    const isBladeComponentTag = tag.startsWith('x-')
+    const componentType = TAG_TO_COMPONENT[tag] || (isBladeComponentTag ? 'card' : undefined)
     if (!componentType) continue
 
     const nodeId = makeNodeId('node')
@@ -852,8 +853,21 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
       node.props.links = 'Home,About,Contact'
       node.size = { width: 800, height: 56 }
     } else if (componentType === 'card') {
-      node.props.title = text || 'Card'
+      node.props.title = isBladeComponentTag ? tag : (text || 'Card')
       node.size = { width: 420, height: 160 }
+      node.style = {
+        ...node.style,
+        border: '1px solid #D1D5DB',
+        borderRadius: '10px',
+        backgroundColor: '#FFFFFF',
+        padding: '12px'
+      }
+    } else if (componentType === 'container') {
+      node.style = {
+        ...node.style,
+        border: '1px dashed #93C5FD',
+        backgroundColor: '#F8FAFC'
+      }
     }
 
     nodes.push(node)
@@ -910,7 +924,7 @@ async function readSourceMapManifest(projectPath: string): Promise<SourceMapping
 }
 
 function parseSelector(selector: string): { tag: string; nth: number } | null {
-  const match = selector.match(/^([a-zA-Z][a-zA-Z0-9]*):nth-of-type\((\d+)\)$/)
+  const match = selector.match(/^([a-zA-Z][a-zA-Z0-9:._-]*):nth-of-type\((\d+)\)$/)
   if (!match) return null
 
   return {
