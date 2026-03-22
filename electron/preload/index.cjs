@@ -9,6 +9,7 @@ const electronAPI = {
 
   // Dialog
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
+  selectEntryFile: (sourceRoot) => ipcRenderer.invoke('dialog:select-entry-file', sourceRoot),
   saveFileDialog: (options) => ipcRenderer.invoke('dialog:save-file', options),
 
   // File system
@@ -22,6 +23,7 @@ const electronAPI = {
   listProjects: () => ipcRenderer.invoke('projects:list'),
   createProject: (name) => ipcRenderer.invoke('projects:create', name),
   importProjectFromSource: (sourceRoot) => ipcRenderer.invoke('projects:import-source', sourceRoot),
+  importProjectFromSourceWithEntry: (sourceRoot, entryFile) => ipcRenderer.invoke('projects:import-source-with-entry', sourceRoot, entryFile),
   refreshProjectFromSource: (projectPath) => ipcRenderer.invoke('projects:refresh-from-source', projectPath),
   loadProject: (path) => ipcRenderer.invoke('projects:load', path),
   saveProject: (path, data) => ipcRenderer.invoke('projects:save', path, data),

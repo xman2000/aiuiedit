@@ -5,6 +5,7 @@ declare global {
     electron: {
       getVersion: () => Promise<string>
       selectDirectory: () => Promise<string | null>
+      selectEntryFile: (sourceRoot?: string) => Promise<string | null>
       saveFileDialog: (options: {
         title?: string
         defaultPath?: string
@@ -16,6 +17,7 @@ declare global {
       listProjects: () => Promise<any[]>
       createProject: (name: string) => Promise<any>
       importProjectFromSource: (sourceRoot: string) => Promise<{ path: string; project: any; canvas: any }>
+      importProjectFromSourceWithEntry: (sourceRoot: string, entryFile: string) => Promise<{ path: string; project: any; canvas: any }>
       refreshProjectFromSource: (projectPath: string) => Promise<{ project: any; canvas: any }>
       loadProject: (path: string) => Promise<{ project: any; canvas: any }>
       saveProject: (path: string, data: any) => Promise<boolean>

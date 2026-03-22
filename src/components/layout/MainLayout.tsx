@@ -214,7 +214,27 @@ function EmptyState() {
       const sourcePath = await window.electron.selectDirectory()
       if (!sourcePath) return
 
-      const imported = await window.electron.importProjectFromSource(sourcePath)
+      let imported: { path: string; project: any; canvas: any }
+
+      try {
+        imported = await window.electron.importProjectFromSource(sourcePath)
+      } catch (error) {
+        const message = String(error)
+        const detectionFailed = message.includes('Could not detect an entry file')
+
+        if (!detectionFailed) {
+          throw error
+        }
+
+        const selectedEntry = await window.electron.selectEntryFile(sourcePath)
+        if (!selectedEntry) {
+          window.showToast('Import canceled: no entry file selected', 'info')
+          return
+        }
+
+        imported = await window.electron.importProjectFromSourceWithEntry(sourcePath, selectedEntry)
+      }
+
       setCurrentProject(imported.project, imported.path)
 
       const fallbackPageId = imported.project?.pages?.[0]?.id || 'page-1'

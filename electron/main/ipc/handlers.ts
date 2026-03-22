@@ -549,6 +549,110 @@ export function setupIPC() {
     return app.getVersion()
   })
 
+  const importSourceProject = async (sourceRoot: string, entryFile: string, framework: SupportedFramework) => {
+    const workspaceRoot = await getWorkspaceRoot()
+    const projectsDir = join(workspaceRoot, 'projects')
+    await fs.mkdir(projectsDir, { recursive: true })
+
+    const entryRelative = relative(sourceRoot, entryFile)
+    if (entryRelative.startsWith('..')) {
+      throw new Error('Selected entry file must be inside the selected source directory')
+    }
+
+    const sourceCode = await fs.readFile(entryFile, 'utf-8')
+    const { nodes, mappings } = buildImportedNodes(sourceCode, entryFile, sourceRoot)
+
+    const sourceName = sanitizeProjectName(basename(sourceRoot))
+    const projectName = `${sourceName}-import`
+    const projectDir = join(projectsDir, `${projectName}.canvas`)
+
+    try {
+      await fs.access(projectDir)
+      throw new Error('Imported project already exists')
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        throw error
+      }
+    }
+
+    await fs.mkdir(projectDir, { recursive: true })
+    await fs.mkdir(join(projectDir, 'assets'), { recursive: true })
+    await fs.mkdir(join(projectDir, 'exports'), { recursive: true })
+    await fs.mkdir(join(projectDir, '.aiuiedit'), { recursive: true })
+
+    const project = {
+      id: randomUUID(),
+      name: projectName,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      pages: [
+        {
+          id: 'page-1',
+          name: 'Imported Page',
+          route: '/',
+          title: 'Imported Page',
+          description: '',
+          template: 'default',
+          noIndex: false,
+          authRequired: false
+        }
+      ],
+      designSystem: {
+        colors: {
+          primary: { name: 'Primary', value: '#3B82F6' },
+          secondary: { name: 'Secondary', value: '#10B981' },
+          accent: { name: 'Accent', value: '#F59E0B' },
+          background: { name: 'Background', value: '#FFFFFF' },
+          text: { name: 'Text', value: '#1F2937' }
+        },
+        typography: {
+          fontFamily: 'Inter',
+          baseSize: 16
+        }
+      },
+      source: {
+        root: sourceRoot,
+        framework,
+        entryFile: entryRelative,
+        roundTrip: true,
+        pages: {
+          'page-1': {
+            file: entryRelative,
+            route: '/'
+          }
+        }
+      }
+    }
+
+    const manifest: SourceMappingManifest = {
+      version: 1,
+      framework,
+      sourceRoot,
+      entryFile: entryRelative,
+      generatedAt: new Date().toISOString(),
+      mappings
+    }
+
+    const canvas = {
+      nodes,
+      selectedIds: [],
+      zoom: 1,
+      viewport: { x: 0, y: 0 }
+    }
+
+    await Promise.all([
+      fs.writeFile(join(projectDir, 'project.json'), JSON.stringify(project, null, 2)),
+      fs.writeFile(join(projectDir, 'canvas-state.json'), JSON.stringify(canvas, null, 2)),
+      fs.writeFile(join(projectDir, '.aiuiedit', 'source-map.json'), JSON.stringify(manifest, null, 2))
+    ])
+
+    return {
+      path: projectDir,
+      project,
+      canvas
+    }
+  }
+
   // Select sandbox directory
   ipcMain.handle('dialog:select-directory', async () => {
     const mainWindow = getMainWindow()
@@ -568,6 +672,33 @@ export function setupIPC() {
     }
     
     return result.filePaths[0]
+  })
+
+  ipcMain.handle('dialog:select-entry-file', async (_event, sourceRoot?: string) => {
+    const mainWindow = getMainWindow()
+    if (!mainWindow) {
+      console.error('No main window available')
+      return null
+    }
+
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      title: 'Select App Entry File',
+      defaultPath: sourceRoot,
+      buttonLabel: 'Use Entry File',
+      filters: [
+        {
+          name: 'Web Source Files',
+          extensions: ['tsx', 'ts', 'jsx', 'js', 'html']
+        }
+      ]
+    })
+
+    if (result.canceled) {
+      return null
+    }
+
+    return result.filePaths[0] || null
   })
 
   ipcMain.handle('dialog:save-file', async (_event, options: { title?: string; defaultPath?: string; filters?: Array<{ name: string; extensions: string[] }> }) => {
@@ -733,110 +864,17 @@ export function setupIPC() {
 
   // Import existing source project (round-trip bootstrap)
   ipcMain.handle('projects:import-source', async (_event, sourceRoot: string) => {
-    const workspaceRoot = await getWorkspaceRoot()
-    const projectsDir = join(workspaceRoot, 'projects')
-    await fs.mkdir(projectsDir, { recursive: true })
-
     const detected = await detectFramework(sourceRoot)
     if (!detected.entryFile) {
       throw new Error('Could not detect an entry file. Select the app folder (for monorepos, choose the frontend package directory).')
     }
+    return importSourceProject(sourceRoot, detected.entryFile, detected.framework)
+  })
 
-    const sourceCode = await fs.readFile(detected.entryFile, 'utf-8')
-    const { nodes, mappings } = buildImportedNodes(sourceCode, detected.entryFile, sourceRoot)
-
-    const sourceName = sanitizeProjectName(basename(sourceRoot))
-    const projectName = `${sourceName}-import`
-    const projectDir = join(projectsDir, `${projectName}.canvas`)
-
-    try {
-      await fs.access(projectDir)
-      throw new Error('Imported project already exists')
-    } catch (error: any) {
-      if (error.code !== 'ENOENT') {
-        throw error
-      }
-    }
-
-    await fs.mkdir(projectDir, { recursive: true })
-    await fs.mkdir(join(projectDir, 'assets'), { recursive: true })
-    await fs.mkdir(join(projectDir, 'exports'), { recursive: true })
-    await fs.mkdir(join(projectDir, '.aiuiedit'), { recursive: true })
-
-    const project = {
-      id: randomUUID(),
-      name: projectName,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      pages: [
-        {
-          id: 'page-1',
-          name: 'Imported Page',
-          route: '/',
-          title: 'Imported Page',
-          description: '',
-          template: 'default',
-          noIndex: false,
-          authRequired: false
-        }
-      ],
-      designSystem: {
-        colors: {
-          primary: { name: 'Primary', value: '#3B82F6' },
-          secondary: { name: 'Secondary', value: '#10B981' },
-          accent: { name: 'Accent', value: '#F59E0B' },
-          background: { name: 'Background', value: '#FFFFFF' },
-          text: { name: 'Text', value: '#1F2937' }
-        },
-        typography: {
-          fontFamily: 'Inter',
-          baseSize: 16
-        }
-      },
-      source: {
-        root: sourceRoot,
-        framework: detected.framework,
-        entryFile: relative(sourceRoot, detected.entryFile),
-        roundTrip: true,
-        pages: {
-          'page-1': {
-            file: relative(sourceRoot, detected.entryFile),
-            route: '/'
-          }
-        }
-      }
-    }
-
-    const manifest: SourceMappingManifest = {
-      version: 1,
-      framework: detected.framework,
-      sourceRoot,
-      entryFile: relative(sourceRoot, detected.entryFile),
-      generatedAt: new Date().toISOString(),
-      mappings
-    }
-
-    await Promise.all([
-      fs.writeFile(join(projectDir, 'project.json'), JSON.stringify(project, null, 2)),
-      fs.writeFile(join(projectDir, 'canvas-state.json'), JSON.stringify({
-        nodes,
-        selectedIds: [],
-        zoom: 1,
-        viewport: { x: 0, y: 0 }
-      }, null, 2)),
-      fs.writeFile(join(projectDir, '.aiuiedit', 'source-map.json'), JSON.stringify(manifest, null, 2))
-    ])
-
-    return {
-      path: projectDir,
-      project,
-      canvas: {
-        nodes,
-        selectedIds: [],
-        zoom: 1,
-        viewport: { x: 0, y: 0 }
-      }
-    }
+  ipcMain.handle('projects:import-source-with-entry', async (_event, sourceRoot: string, entryFile: string) => {
+    const detected = await detectFramework(sourceRoot)
+    const framework = detected.framework === 'unknown' ? 'unknown' : detected.framework
+    return importSourceProject(sourceRoot, entryFile, framework)
   })
 
   // Load project
