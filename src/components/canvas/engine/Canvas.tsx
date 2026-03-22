@@ -151,22 +151,6 @@ export function Canvas() {
       return '#111827'
     }
 
-    const chooseBackground = (className?: string): string | undefined => {
-      const classes = (className || '').toLowerCase()
-      if (classes.includes('bg-brand-700') || classes.includes('bg-blue-') || classes.includes('bg-indigo-') || classes.includes('bg-primary')) {
-        return '#1D4ED8'
-      }
-      if (classes.includes('bg-stone-900') || classes.includes('bg-gray-900')) return '#111827'
-      if (classes.includes('bg-white')) return '#FFFFFF'
-      return undefined
-    }
-
-    const isDarkBackground = (hex?: string): boolean => {
-      if (!hex) return false
-      const normalized = hex.toLowerCase()
-      return ['#111827', '#1d4ed8'].includes(normalized)
-    }
-
     const pageWidth = 1120
     const maxY = 740
     const columns = 3
@@ -204,22 +188,17 @@ export function Canvas() {
               : block.type === 'image'
                 ? 'image'
                 : block.type === 'card'
-                  ? 'card'
+                  ? 'text'
                   : 'text'
 
       const className = block.className || ''
-      const backgroundFromClass = chooseBackground(className)
       const textColorFromClass = chooseTextColor(className)
-      const resolvedTextColor = isDarkBackground(backgroundFromClass) && textColorFromClass !== '#FFFFFF'
-        ? '#FFFFFF'
-        : textColorFromClass
+      const resolvedTextColor = textColorFromClass === '#FFFFFF' ? '#111827' : textColorFromClass
 
       const preferredHeight =
         type === 'image'
           ? 180
-          : type === 'card'
-            ? 140
-            : isHeading
+          : isHeading
               ? 58
               : type === 'button'
                 ? 48
@@ -239,9 +218,7 @@ export function Canvas() {
           height:
             type === 'image'
               ? 180
-              : type === 'card'
-                ? 140
-                : isHeading
+              : isHeading
                   ? 58
                   : type === 'button'
                     ? 48
@@ -249,7 +226,7 @@ export function Canvas() {
         },
         style: type === 'button'
           ? {
-              backgroundColor: backgroundFromClass || '#1D4ED8',
+              backgroundColor: '#1D4ED8',
               color: '#FFFFFF',
               borderRadius: '8px',
               border: 'none',
@@ -257,9 +234,9 @@ export function Canvas() {
               width: `${Math.min(placement.width, 260)}px`,
               fontWeight: '600'
             }
-          : type === 'link'
-            ? {
-                color: resolvedTextColor === '#FFFFFF' ? '#FFFFFF' : '#1D4ED8',
+            : type === 'link'
+              ? {
+                color: '#1D4ED8',
                 textDecoration: 'underline',
                 fontSize: '16px'
               }
@@ -269,15 +246,6 @@ export function Canvas() {
                   border: '1px solid #D1D5DB',
                   objectFit: 'cover'
                 }
-              : type === 'card'
-                ? {
-                    backgroundColor: backgroundFromClass || '#FFFFFF',
-                    color: resolvedTextColor,
-                    borderRadius: '10px',
-                    border: '1px solid #D1D5DB',
-                    padding: '12px',
-                    boxShadow: '0 2px 8px rgba(15, 23, 42, 0.08)'
-                  }
             : {
                 color: resolvedTextColor,
                 fontSize: isHeading ? '24px' : '16px',
@@ -292,9 +260,7 @@ export function Canvas() {
                 ? { text: block.text }
                 : type === 'image'
                   ? { src: block.src || '', alt: block.text || 'Image' }
-                  : type === 'card'
-                    ? { title: block.text.slice(0, 80) || 'Card' }
-                    : { text: block.text, href: block.href || '#' },
+                  : { text: block.text, href: block.href || '#' },
         children: [],
         name: type[0].toUpperCase() + type.slice(1),
         locked: false,

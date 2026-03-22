@@ -67,6 +67,31 @@ declare global {
           description?: string
         }
       }) => Promise<{ success: boolean; sourceFile: string; route: string }>
+      applyRenderedTextEdit: (payload: {
+        projectPath: string
+        pageId: string
+        originalText: string
+        newText: string
+      }) => Promise<{ success: boolean; sourceFile: string; method: 'exact' | 'whitespace' }>
+      applyRenderedElementEdit: (payload: {
+        projectPath: string
+        pageId: string
+        tag: string
+        originalText: string
+        newText: string
+        originalAttributes: {
+          href?: string
+          src?: string
+          alt?: string
+          className?: string
+        }
+        newAttributes: {
+          href?: string
+          src?: string
+          alt?: string
+          className?: string
+        }
+      }) => Promise<{ success: boolean; sourceFile: string; changes: string[] }>
       capturePreviewRoute: (payload: {
         url: string
       }) => Promise<{

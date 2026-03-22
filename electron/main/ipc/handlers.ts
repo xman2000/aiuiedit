@@ -51,6 +51,33 @@ interface SourcePageSyncPayload {
   }
 }
 
+interface SourceRenderedTextEditPayload {
+  projectPath: string
+  pageId: string
+  originalText: string
+  newText: string
+}
+
+interface SourceRenderedElementEditPayload {
+  projectPath: string
+  pageId: string
+  tag: string
+  originalText: string
+  newText: string
+  originalAttributes: {
+    href?: string
+    src?: string
+    alt?: string
+    className?: string
+  }
+  newAttributes: {
+    href?: string
+    src?: string
+    alt?: string
+    className?: string
+  }
+}
+
 interface ImportedNode {
   id: string
   type: string
@@ -1199,6 +1226,114 @@ function applyPageMetadataPatch(sourceCode: string, title?: string, description?
   return `${block}${sourceCode}`
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function applyRenderedTextEditInSource(sourceCode: string, originalText: string, newText: string): { updated: string; method: 'exact' | 'whitespace'; applied: boolean } {
+  if (!originalText.trim()) {
+    return { updated: sourceCode, method: 'exact', applied: false }
+  }
+
+  const exactIndex = sourceCode.indexOf(originalText)
+  if (exactIndex >= 0) {
+    const updated =
+      sourceCode.slice(0, exactIndex) +
+      newText +
+      sourceCode.slice(exactIndex + originalText.length)
+    return { updated, method: 'exact', applied: true }
+  }
+
+  const normalizedParts = originalText.trim().split(/\s+/).map(escapeRegex)
+  if (normalizedParts.length === 0) {
+    return { updated: sourceCode, method: 'whitespace', applied: false }
+  }
+
+  const flexibleRegex = new RegExp(normalizedParts.join('\\s+'))
+  const match = sourceCode.match(flexibleRegex)
+  if (!match || match.index === undefined) {
+    return { updated: sourceCode, method: 'whitespace', applied: false }
+  }
+
+  const updated =
+    sourceCode.slice(0, match.index) +
+    newText +
+    sourceCode.slice(match.index + match[0].length)
+
+  return { updated, method: 'whitespace', applied: true }
+}
+
+function replaceFirstAttributeValue(attrs: string, attrName: string, nextValue: string): { attrs: string; changed: boolean } {
+  const attrRegex = new RegExp(`\\b${attrName}\\s*=\\s*(["'])([^"']*)\\1`, 'i')
+  const match = attrs.match(attrRegex)
+  if (!match || match.index === undefined) {
+    return { attrs, changed: false }
+  }
+
+  const quoted = `${attrName}="${nextValue.replace(/"/g, '&quot;')}"`
+  const updated = attrs.slice(0, match.index) + quoted + attrs.slice(match.index + match[0].length)
+  return { attrs: updated, changed: true }
+}
+
+function applyAttributeEditInSource(
+  sourceCode: string,
+  tag: string,
+  attrName: 'href' | 'src' | 'alt' | 'class',
+  originalValue: string | undefined,
+  newValue: string | undefined,
+  originalText: string
+): { updated: string; applied: boolean } {
+  if (newValue === undefined) return { updated: sourceCode, applied: false }
+
+  const normalizedTag = tag.toLowerCase()
+  const escapedOriginal = originalValue ? escapeRegex(originalValue) : ''
+  const replacement = `${attrName}="${newValue.replace(/"/g, '&quot;')}"`
+
+  if (originalValue) {
+    const globalExact = new RegExp(`\\b${attrName}\\s*=\\s*(["'])${escapedOriginal}\\1`)
+    const exactMatch = sourceCode.match(globalExact)
+    if (exactMatch && exactMatch.index !== undefined) {
+      const updated = sourceCode.slice(0, exactMatch.index) + replacement + sourceCode.slice(exactMatch.index + exactMatch[0].length)
+      return { updated, applied: true }
+    }
+  }
+
+  if (originalText.trim()) {
+    const tagRegex = new RegExp(`<${escapeRegex(normalizedTag)}\\b([^>]*)>([\\s\\S]*?)<\\/${escapeRegex(normalizedTag)}>`,'gi')
+    let match: RegExpExecArray | null
+    while ((match = tagRegex.exec(sourceCode)) !== null) {
+      const attrs = match[1] || ''
+      const body = match[2] || ''
+      if (!body.includes(originalText)) continue
+
+      const replaced = replaceFirstAttributeValue(attrs, attrName, newValue)
+      const nextAttrs = replaced.changed ? replaced.attrs : `${attrs} ${replacement}`
+      const full = match[0]
+      const opening = `<${normalizedTag}${nextAttrs}>`
+      const updatedTag = `${opening}${body}</${normalizedTag}>`
+      const updated = sourceCode.slice(0, match.index) + updatedTag + sourceCode.slice(match.index + full.length)
+      return { updated, applied: true }
+    }
+  }
+
+  if (normalizedTag === 'img') {
+    const imgRegex = /<img\b([^>]*)\/?>/gi
+    let match: RegExpExecArray | null
+    while ((match = imgRegex.exec(sourceCode)) !== null) {
+      const attrs = match[1] || ''
+      if (originalValue && !attrs.includes(originalValue)) continue
+      const replaced = replaceFirstAttributeValue(attrs, attrName, newValue)
+      const nextAttrs = replaced.changed ? replaced.attrs : `${attrs} ${replacement}`
+      const full = match[0]
+      const updatedTag = `<img${nextAttrs}>`
+      const updated = sourceCode.slice(0, match.index) + updatedTag + sourceCode.slice(match.index + full.length)
+      return { updated, applied: true }
+    }
+  }
+
+  return { updated: sourceCode, applied: false }
+}
+
 function normalizeRoute(route: string): string {
   const cleaned = route.trim().replace(/\s+/g, '-').replace(/\/+/g, '/').replace(/[^a-zA-Z0-9/_-]/g, '')
   if (!cleaned || cleaned === '/') return '/'
@@ -1945,6 +2080,110 @@ export function setupIPC() {
       success: true,
       sourceFile: desiredAbs,
       route: normalizedRoute
+    }
+  })
+
+  ipcMain.handle('source:apply-rendered-text-edit', async (_event, payload: SourceRenderedTextEditPayload) => {
+    const { projectPath, pageId, originalText, newText } = payload
+
+    if (!originalText.trim()) {
+      throw new Error('Original text is empty; cannot map rendered edit to source')
+    }
+
+    const projectFile = join(projectPath, 'project.json')
+    const projectRaw = await fs.readFile(projectFile, 'utf-8')
+    const project = JSON.parse(projectRaw)
+
+    if (!project?.source?.roundTrip || !project?.source?.root) {
+      throw new Error('Project is not source-linked')
+    }
+
+    const sourceRoot = project.source.root as string
+    const sourcePages: Record<string, { file: string; route: string; framework?: SupportedFramework }> = project.source.pages || {}
+    const pageSource = sourcePages[pageId]
+    const sourceFile = pageSource?.file
+      ? join(sourceRoot, pageSource.file)
+      : join(sourceRoot, project.source.entryFile)
+
+    if (!(await pathExists(sourceFile))) {
+      throw new Error('Could not resolve source file for rendered edit')
+    }
+
+    const sourceCode = await fs.readFile(sourceFile, 'utf-8')
+    const patched = applyRenderedTextEditInSource(sourceCode, originalText, newText)
+
+    if (!patched.applied) {
+      throw new Error('Could not locate selected rendered text in source file')
+    }
+
+    await fs.writeFile(sourceFile, patched.updated, 'utf-8')
+
+    return {
+      success: true,
+      sourceFile,
+      method: patched.method
+    }
+  })
+
+  ipcMain.handle('source:apply-rendered-element-edit', async (_event, payload: SourceRenderedElementEditPayload) => {
+    const { projectPath, pageId, tag, originalText, newText, originalAttributes, newAttributes } = payload
+
+    const projectFile = join(projectPath, 'project.json')
+    const projectRaw = await fs.readFile(projectFile, 'utf-8')
+    const project = JSON.parse(projectRaw)
+
+    if (!project?.source?.roundTrip || !project?.source?.root) {
+      throw new Error('Project is not source-linked')
+    }
+
+    const sourceRoot = project.source.root as string
+    const sourcePages: Record<string, { file: string; route: string; framework?: SupportedFramework }> = project.source.pages || {}
+    const pageSource = sourcePages[pageId]
+    const sourceFile = pageSource?.file
+      ? join(sourceRoot, pageSource.file)
+      : join(sourceRoot, project.source.entryFile)
+
+    if (!(await pathExists(sourceFile))) {
+      throw new Error('Could not resolve source file for rendered edit')
+    }
+
+    let updated = await fs.readFile(sourceFile, 'utf-8')
+    const changes: string[] = []
+
+    if (originalText.trim() && newText.trim() && originalText.trim() !== newText.trim()) {
+      const textPatch = applyRenderedTextEditInSource(updated, originalText, newText)
+      if (textPatch.applied) {
+        updated = textPatch.updated
+        changes.push(`text:${textPatch.method}`)
+      }
+    }
+
+    const attrPairs: Array<['href' | 'src' | 'alt' | 'class', string | undefined, string | undefined]> = [
+      ['href', originalAttributes.href, newAttributes.href],
+      ['src', originalAttributes.src, newAttributes.src],
+      ['alt', originalAttributes.alt, newAttributes.alt],
+      ['class', originalAttributes.className, newAttributes.className]
+    ]
+
+    for (const [attrName, originalValue, nextValue] of attrPairs) {
+      if ((nextValue || '') === (originalValue || '')) continue
+      const attrPatch = applyAttributeEditInSource(updated, tag, attrName, originalValue, nextValue, originalText)
+      if (attrPatch.applied) {
+        updated = attrPatch.updated
+        changes.push(`attr:${attrName}`)
+      }
+    }
+
+    if (changes.length === 0) {
+      throw new Error('No applicable source patch found for selected element edit')
+    }
+
+    await fs.writeFile(sourceFile, updated, 'utf-8')
+
+    return {
+      success: true,
+      sourceFile,
+      changes
     }
   })
 

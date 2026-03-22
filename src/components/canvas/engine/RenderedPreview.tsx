@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { Download, ExternalLink, RefreshCcw } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
+import { useProjectStore } from '@/store/useProjectStore'
 import type { Page, Project } from '@/types'
 
 interface RenderedPreviewProps {
@@ -25,6 +26,12 @@ interface SnapshotSelection {
   id: string
   tag: string
   text: string
+  attributes: {
+    href?: string
+    src?: string
+    alt?: string
+    className?: string
+  }
 }
 
 function joinPreviewUrl(base: string, route: string): string {
@@ -42,15 +49,16 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
   const instrumentationScript = `<script>(function(){
     var counter = 0;
     var active = null;
-    var selector = 'h1,h2,h3,h4,h5,h6,p,li,a,button,span';
+    var selector = 'h1,h2,h3,h4,h5,h6,p,li,a,button,span,img';
     function mark(el){
       if(active){ active.style.outline = ''; active.style.outlineOffset = ''; }
       active = el;
       if(active){ active.style.outline = '2px solid #2563eb'; active.style.outlineOffset = '2px'; }
     }
     document.querySelectorAll(selector).forEach(function(el){
+      var tagName = (el.tagName || '').toLowerCase();
       var text = (el.textContent || '').trim();
-      if(text.length < 2) return;
+      if(tagName !== 'img' && text.length < 2) return;
       counter += 1;
       el.setAttribute('data-aiuiedit-id', 'aiuiedit-' + counter);
       el.style.cursor = 'pointer';
@@ -69,7 +77,13 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
         payload: {
           id: el.getAttribute('data-aiuiedit-id'),
           tag: (el.tagName || '').toLowerCase(),
-          text: (el.textContent || '').trim()
+          text: (el.textContent || '').trim(),
+          attributes: {
+            href: el.getAttribute('href') || undefined,
+            src: el.getAttribute('src') || undefined,
+            alt: el.getAttribute('alt') || undefined,
+            className: el.getAttribute('class') || undefined
+          }
         }
       }, '*');
     }, true);
@@ -80,15 +94,26 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
       var payload = data.payload || {};
       var id = payload.id;
       var text = payload.text || '';
+      var attributes = payload.attributes || {};
       if(!id) return;
       var el = document.querySelector('[data-aiuiedit-id="' + id + '"]');
       if(!el) return;
       el.textContent = text;
+      if(typeof attributes.href === 'string') el.setAttribute('href', attributes.href);
+      if(typeof attributes.src === 'string') el.setAttribute('src', attributes.src);
+      if(typeof attributes.alt === 'string') el.setAttribute('alt', attributes.alt);
+      if(typeof attributes.className === 'string') el.setAttribute('class', attributes.className);
       window.parent.postMessage({
         type: 'aiuiedit-updated',
         payload: {
           id: id,
-          text: text
+          text: text,
+          attributes: {
+            href: el.getAttribute('href') || undefined,
+            src: el.getAttribute('src') || undefined,
+            alt: el.getAttribute('alt') || undefined,
+            className: el.getAttribute('class') || undefined
+          }
         }
       }, '*');
     });
@@ -102,6 +127,7 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
 
 export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }: RenderedPreviewProps) {
   const { settings, setSettings } = useAppStore()
+  const { projectPath } = useProjectStore()
   const [draftBaseUrl, setDraftBaseUrl] = useState(settings.livePreviewBaseUrl || 'http://127.0.0.1:8000')
   const [refreshToken, setRefreshToken] = useState(0)
   const [isCapturing, setIsCapturing] = useState(false)
@@ -120,6 +146,10 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [embeddedLoaded, setEmbeddedLoaded] = useState(false)
   const [snapshotSelection, setSnapshotSelection] = useState<SnapshotSelection | null>(null)
   const [snapshotEditText, setSnapshotEditText] = useState('')
+  const [snapshotHref, setSnapshotHref] = useState('')
+  const [snapshotSrc, setSnapshotSrc] = useState('')
+  const [snapshotAlt, setSnapshotAlt] = useState('')
+  const [snapshotClassName, setSnapshotClassName] = useState('')
   const timeoutRef = useRef<number | null>(null)
   const snapshotIframeRef = useRef<HTMLIFrameElement | null>(null)
 
@@ -147,14 +177,33 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
         const selected: SnapshotSelection = {
           id: data.payload.id,
           tag: data.payload.tag,
-          text: data.payload.text || ''
+          text: data.payload.text || '',
+          attributes: {
+            href: data.payload.attributes?.href,
+            src: data.payload.attributes?.src,
+            alt: data.payload.attributes?.alt,
+            className: data.payload.attributes?.className
+          }
         }
         setSnapshotSelection(selected)
         setSnapshotEditText(selected.text)
+        setSnapshotHref(selected.attributes.href || '')
+        setSnapshotSrc(selected.attributes.src || '')
+        setSnapshotAlt(selected.attributes.alt || '')
+        setSnapshotClassName(selected.attributes.className || '')
       }
 
       if (data.type === 'aiuiedit-updated' && data.payload && snapshotSelection?.id === data.payload.id) {
-        setSnapshotSelection((prev) => prev ? { ...prev, text: data.payload.text || prev.text } : prev)
+        setSnapshotSelection((prev) => prev ? {
+          ...prev,
+          text: data.payload.text || prev.text,
+          attributes: {
+            href: data.payload.attributes?.href ?? prev.attributes.href,
+            src: data.payload.attributes?.src ?? prev.attributes.src,
+            alt: data.payload.attributes?.alt ?? prev.attributes.alt,
+            className: data.payload.attributes?.className ?? prev.attributes.className
+          }
+        } : prev)
       }
     }
 
@@ -261,10 +310,75 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
       type: 'aiuiedit-apply-text',
       payload: {
         id: snapshotSelection.id,
-        text: snapshotEditText
+        text: snapshotEditText,
+        attributes: {
+          href: snapshotHref,
+          src: snapshotSrc,
+          alt: snapshotAlt,
+          className: snapshotClassName
+        }
       }
     }, '*')
     setStatusMessage('Updated snapshot text (visual edit only). Use Capture to Canvas to bring changes into design mode.')
+  }
+
+  const applySnapshotElementEditToSource = async () => {
+    if (!currentPage || !projectPath || !snapshotSelection?.id) {
+      window.showToast('No source-linked page selected', 'error')
+      return
+    }
+
+    const originalText = snapshotSelection.text
+    const newText = snapshotEditText
+
+    const hasTextChange = !!originalText && !!newText && originalText !== newText
+    const hasAttrChange =
+      (snapshotSelection.attributes.href || '') !== snapshotHref ||
+      (snapshotSelection.attributes.src || '') !== snapshotSrc ||
+      (snapshotSelection.attributes.alt || '') !== snapshotAlt ||
+      (snapshotSelection.attributes.className || '') !== snapshotClassName
+
+    if (!hasTextChange && !hasAttrChange) {
+      window.showToast('No rendered changes to apply', 'info')
+      return
+    }
+
+    try {
+      const result = await window.electron.applyRenderedElementEdit({
+        projectPath,
+        pageId: currentPage.id,
+        tag: snapshotSelection.tag,
+        originalText,
+        newText,
+        originalAttributes: snapshotSelection.attributes,
+        newAttributes: {
+          href: snapshotHref,
+          src: snapshotSrc,
+          alt: snapshotAlt,
+          className: snapshotClassName
+        }
+      })
+
+      applySnapshotTextEdit()
+      setSnapshotSelection((prev) => (prev
+        ? {
+            ...prev,
+            text: newText,
+            attributes: {
+              href: snapshotHref || undefined,
+              src: snapshotSrc || undefined,
+              alt: snapshotAlt || undefined,
+              className: snapshotClassName || undefined
+            }
+          }
+        : prev))
+      setStatusMessage(`Applied edit to source (${result.changes.join(', ')}) -> ${result.sourceFile}`)
+      window.showToast('Rendered edit patched to source', 'success')
+      await loadSnapshot()
+    } catch (error) {
+      console.error('Source apply failed:', error)
+      window.showToast(`Source patch failed: ${error}`, 'error')
+    }
   }
 
   return (
@@ -353,13 +467,62 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
               {snapshotSelection ? (
                 <div className="mt-3 space-y-2">
                   <p className="text-xs text-muted-foreground">Tag: <span className="font-mono text-foreground">{snapshotSelection.tag}</span></p>
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text</label>
                   <textarea
                     value={snapshotEditText}
                     onChange={(e) => setSnapshotEditText(e.target.value)}
                     className="h-36 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
                   />
-                  <Button size="sm" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
-                  <p className="text-[11px] text-muted-foreground">This edits the rendered snapshot for review. Then click Capture to Canvas to continue editing in design mode.</p>
+                  {(snapshotSelection.tag === 'a' || snapshotSelection.attributes.href !== undefined) && (
+                    <>
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Href</label>
+                      <input
+                        type="text"
+                        value={snapshotHref}
+                        onChange={(e) => setSnapshotHref(e.target.value)}
+                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                      />
+                    </>
+                  )}
+                  {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.src !== undefined) && (
+                    <>
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Src</label>
+                      <input
+                        type="text"
+                        value={snapshotSrc}
+                        onChange={(e) => setSnapshotSrc(e.target.value)}
+                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                      />
+                    </>
+                  )}
+                  {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.alt !== undefined) && (
+                    <>
+                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Alt</label>
+                      <input
+                        type="text"
+                        value={snapshotAlt}
+                        onChange={(e) => setSnapshotAlt(e.target.value)}
+                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                      />
+                    </>
+                  )}
+                  <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
+                  <input
+                    type="text"
+                    value={snapshotClassName}
+                    onChange={(e) => setSnapshotClassName(e.target.value)}
+                    className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                  <Button size="sm" variant="outline" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    onClick={applySnapshotElementEditToSource}
+                    disabled={!currentProject?.source?.roundTrip}
+                  >
+                    Apply to Source
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground">Apply to Source writes atomic text/attribute patches to the mapped page file, then refreshes snapshot.</p>
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">Click any text element in the snapshot to inspect/edit it.</p>
