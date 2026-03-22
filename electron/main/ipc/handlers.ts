@@ -114,6 +114,57 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
+async function findFirstFileInTree(rootDir: string, preferredSuffixes: string[], maxDepth = 5): Promise<string | null> {
+  const ignoredDirs = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'coverage', '.turbo', '.cache'])
+  const normalized = preferredSuffixes.map((suffix) => suffix.replace(/\\/g, '/'))
+  const found: string[] = []
+
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth) return
+
+    let entries: any[]
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true, encoding: 'utf-8' }) as any[]
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      const entryName = String(entry.name)
+
+      if (entry.isDirectory()) {
+        if (ignoredDirs.has(entryName)) continue
+        await walk(join(dir, entryName), depth + 1)
+        continue
+      }
+
+      const fullPath = join(dir, entryName)
+      const relativePath = relative(rootDir, fullPath).replace(/\\/g, '/')
+
+      if (normalized.some((suffix) => relativePath.endsWith(suffix))) {
+        found.push(fullPath)
+      }
+    }
+  }
+
+  await walk(rootDir, 0)
+
+  if (found.length === 0) return null
+
+  found.sort((a, b) => {
+    const relA = relative(rootDir, a).replace(/\\/g, '/')
+    const relB = relative(rootDir, b).replace(/\\/g, '/')
+    const idxA = normalized.findIndex((suffix) => relA.endsWith(suffix))
+    const idxB = normalized.findIndex((suffix) => relB.endsWith(suffix))
+
+    if (idxA !== idxB) return idxA - idxB
+    if (relA.length !== relB.length) return relA.length - relB.length
+    return relA.localeCompare(relB)
+  })
+
+  return found[0]
+}
+
 async function detectFramework(sourceRoot: string): Promise<{ framework: SupportedFramework; entryFile: string | null }> {
   const findFirstExisting = async (candidates: string[]): Promise<string | null> => {
     for (const candidate of candidates) {
@@ -150,7 +201,32 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
   ])
 
   if (nextConfig || nextEntry) {
-    return { framework: 'nextjs', entryFile: nextEntry }
+    if (nextEntry) {
+      return { framework: 'nextjs', entryFile: nextEntry }
+    }
+
+    const discoveredNextEntry = await findFirstFileInTree(sourceRoot, [
+      'app/page.tsx',
+      'app/page.jsx',
+      'app/page.js',
+      'app/layout.tsx',
+      'app/layout.jsx',
+      'app/layout.js',
+      'src/app/page.tsx',
+      'src/app/page.jsx',
+      'src/app/page.js',
+      'src/app/layout.tsx',
+      'src/app/layout.jsx',
+      'src/app/layout.js',
+      'pages/index.tsx',
+      'pages/index.jsx',
+      'pages/index.js',
+      'src/pages/index.tsx',
+      'src/pages/index.jsx',
+      'src/pages/index.js'
+    ])
+
+    return { framework: 'nextjs', entryFile: discoveredNextEntry }
   }
 
   const viteConfig = await findFirstExisting([
@@ -168,7 +244,20 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
   ])
 
   if (viteConfig || viteEntry) {
-    return { framework: 'react-vite', entryFile: viteEntry }
+    if (viteEntry) {
+      return { framework: 'react-vite', entryFile: viteEntry }
+    }
+
+    const discoveredViteEntry = await findFirstFileInTree(sourceRoot, [
+      'src/App.tsx',
+      'src/App.jsx',
+      'src/App.js',
+      'src/main.tsx',
+      'src/main.jsx',
+      'src/main.js'
+    ])
+
+    return { framework: 'react-vite', entryFile: discoveredViteEntry }
   }
 
   const staticEntry = await findFirstExisting([
@@ -176,7 +265,28 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
     join(sourceRoot, 'public', 'index.html')
   ])
 
-  return { framework: 'unknown', entryFile: staticEntry }
+  if (staticEntry) {
+    return { framework: 'unknown', entryFile: staticEntry }
+  }
+
+  const discoveredGenericEntry = await findFirstFileInTree(sourceRoot, [
+    'index.html',
+    'public/index.html',
+    'src/App.tsx',
+    'src/App.jsx',
+    'src/App.js',
+    'src/main.tsx',
+    'src/main.jsx',
+    'src/main.js',
+    'app/page.tsx',
+    'app/page.jsx',
+    'app/page.js',
+    'src/app/page.tsx',
+    'src/app/page.jsx',
+    'src/app/page.js'
+  ])
+
+  return { framework: 'unknown', entryFile: discoveredGenericEntry }
 }
 
 function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: string): { nodes: ImportedNode[]; mappings: SourceMappingItem[] } {
@@ -629,7 +739,7 @@ export function setupIPC() {
 
     const detected = await detectFramework(sourceRoot)
     if (!detected.entryFile) {
-      throw new Error('Could not detect an entry page file in the selected directory')
+      throw new Error('Could not detect an entry file. Select the app folder (for monorepos, choose the frontend package directory).')
     }
 
     const sourceCode = await fs.readFile(detected.entryFile, 'utf-8')
