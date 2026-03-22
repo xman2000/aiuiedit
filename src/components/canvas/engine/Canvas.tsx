@@ -66,27 +66,15 @@ export function Canvas() {
     }
 
     const pageWidth = 1120
-    const maxY = 740
-    const columns = 3
-    const gutter = 18
-    const columnWidth = Math.floor((pageWidth - gutter * (columns - 1)) / columns)
-    const columnHeights = Array.from({ length: columns }, () => 120)
+    const pagePadding = 36
+    const contentWidth = pageWidth - pagePadding * 2
+    let currentY = 108
 
-    const placeNode = (preferredHeight: number): { x: number; y: number; width: number; canPlace: boolean } => {
-      let targetIndex = 0
-      for (let i = 1; i < columnHeights.length; i += 1) {
-        if (columnHeights[i] < columnHeights[targetIndex]) targetIndex = i
-      }
-
-      const yPos = columnHeights[targetIndex]
-      const canPlace = yPos + preferredHeight <= maxY
-      const xPos = 32 + targetIndex * (columnWidth + gutter)
-
-      if (canPlace) {
-        columnHeights[targetIndex] += preferredHeight + 12
-      }
-
-      return { x: xPos, y: yPos, width: columnWidth, canPlace }
+    const estimateTextHeight = (text: string, base = 22, charsPerLine = 88): number => {
+      const normalized = (text || '').trim()
+      if (!normalized) return base + 10
+      const lines = Math.max(1, Math.ceil(normalized.length / charsPerLine))
+      return Math.min(220, base + lines * 20)
     }
 
     payload.blocks.slice(0, 220).forEach((block) => {
@@ -101,42 +89,55 @@ export function Canvas() {
               ? 'link'
               : block.type === 'image'
                 ? 'image'
-                : block.type === 'card'
-                  ? 'text'
-                  : 'text'
+                  : block.type === 'card'
+                    ? 'container'
+                    : 'text'
 
       const className = block.className || ''
       const textColorFromClass = chooseTextColor(className)
       const resolvedTextColor = textColorFromClass === '#FFFFFF' ? '#111827' : textColorFromClass
 
+      const blockText = (block.text || '').trim()
+
       const preferredHeight =
         type === 'image'
-          ? 180
-          : isHeading
-            ? 58
-            : type === 'button'
-              ? 48
-              : 56
+          ? 220
+          : type === 'container'
+            ? Math.max(84, estimateTextHeight(blockText, 52, 90))
+            : isHeading
+              ? Math.max(58, estimateTextHeight(blockText, 32, 54))
+              : type === 'button'
+                ? 48
+                : type === 'link'
+                  ? Math.max(40, estimateTextHeight(blockText, 18, 70))
+                  : Math.max(52, estimateTextHeight(blockText, 24, 86))
 
-      const placement = placeNode(preferredHeight)
-      if (!placement.canPlace) return
+      const x = type === 'button' ? pagePadding : pagePadding
+      const width = type === 'button' ? Math.min(320, Math.max(140, blockText.length * 7 + 52)) : contentWidth
+
+      const y = currentY
+      currentY += preferredHeight + 16
 
       const node = {
         id,
         type,
         pageId: currentPage.id,
         parentId: null,
-        position: { x: placement.x, y: placement.y },
+        position: { x, y },
         size: {
-          width: type === 'button' ? Math.min(placement.width, 260) : placement.width,
+          width,
           height:
             type === 'image'
-              ? 180
+              ? 220
+              : type === 'container'
+                ? Math.max(84, estimateTextHeight(blockText, 52, 90))
               : isHeading
-                ? 58
+                ? Math.max(58, estimateTextHeight(blockText, 32, 54))
                 : type === 'button'
                   ? 48
-                  : 56
+                  : type === 'link'
+                    ? Math.max(40, estimateTextHeight(blockText, 18, 70))
+                    : Math.max(52, estimateTextHeight(blockText, 24, 86))
         },
         style: type === 'button'
           ? {
@@ -145,7 +146,7 @@ export function Canvas() {
               borderRadius: '8px',
               border: 'none',
               padding: '10px 14px',
-              width: `${Math.min(placement.width, 260)}px`,
+              width: `${width}px`,
               fontWeight: '600'
             }
           : type === 'link'
@@ -160,6 +161,14 @@ export function Canvas() {
                   border: '1px solid #D1D5DB',
                   objectFit: 'cover'
                 }
+              : type === 'container'
+                ? {
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '10px',
+                    color: '#0F172A',
+                    padding: '14px'
+                  }
               : {
                   color: resolvedTextColor,
                   fontSize: isHeading ? '24px' : '16px',
@@ -172,6 +181,8 @@ export function Canvas() {
               ? { content: block.text }
               : type === 'button'
                 ? { text: block.text }
+                : type === 'container'
+                  ? { content: block.text || 'Card' }
                 : type === 'image'
                   ? { src: block.src || '', alt: block.text || 'Image' }
                   : { text: block.text, href: block.href || '#' },

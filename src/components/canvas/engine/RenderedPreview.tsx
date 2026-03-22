@@ -88,14 +88,18 @@ const TAILWIND_CLASS_GROUPS: TailwindClassGroup[] = [
   {
     key: 'size',
     label: 'Text Size',
-    matcher: /^text-(xs|sm|base|lg|xl|2xl|3xl|4xl)$/,
+    matcher: /^text-(xs|sm|base|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl|8xl|9xl)$/,
     options: [
       { label: 'XS', value: 'text-xs' },
       { label: 'SM', value: 'text-sm' },
       { label: 'Base', value: 'text-base' },
       { label: 'LG', value: 'text-lg' },
       { label: 'XL', value: 'text-xl' },
-      { label: '2XL', value: 'text-2xl' }
+      { label: '2XL', value: 'text-2xl' },
+      { label: '3XL', value: 'text-3xl' },
+      { label: '4XL', value: 'text-4xl' },
+      { label: '5XL', value: 'text-5xl' },
+      { label: '6XL', value: 'text-6xl' }
     ]
   },
   {
@@ -103,11 +107,15 @@ const TAILWIND_CLASS_GROUPS: TailwindClassGroup[] = [
     label: 'Font Weight',
     matcher: /^font-(thin|extralight|light|normal|medium|semibold|bold|extrabold|black)$/,
     options: [
+      { label: 'Thin', value: 'font-thin' },
+      { label: 'XLight', value: 'font-extralight' },
       { label: 'Light', value: 'font-light' },
       { label: 'Normal', value: 'font-normal' },
       { label: 'Medium', value: 'font-medium' },
       { label: 'Semi', value: 'font-semibold' },
-      { label: 'Bold', value: 'font-bold' }
+      { label: 'Bold', value: 'font-bold' },
+      { label: 'XBold', value: 'font-extrabold' },
+      { label: 'Black', value: 'font-black' }
     ]
   },
   {
@@ -150,68 +158,86 @@ const TAILWIND_CLASS_GROUPS: TailwindClassGroup[] = [
   {
     key: 'radius',
     label: 'Radius',
-    matcher: /^rounded(-(none|sm|md|lg|xl|2xl|full))?$/,
+    matcher: /^rounded(-(none|sm|md|lg|xl|2xl|3xl|full))?$/,
     options: [
       { label: 'None', value: 'rounded-none' },
       { label: 'SM', value: 'rounded-sm' },
       { label: 'MD', value: 'rounded-md' },
       { label: 'LG', value: 'rounded-lg' },
       { label: 'XL', value: 'rounded-xl' },
+      { label: '2XL', value: 'rounded-2xl' },
+      { label: '3XL', value: 'rounded-3xl' },
       { label: 'Full', value: 'rounded-full' }
     ]
   },
   {
     key: 'shadow',
     label: 'Shadow',
-    matcher: /^shadow(-(none|sm|md|lg|xl|2xl))?$/,
+    matcher: /^shadow(-(none|sm|md|lg|xl|2xl|inner))?$/,
     options: [
       { label: 'None', value: 'shadow-none' },
       { label: 'SM', value: 'shadow-sm' },
       { label: 'MD', value: 'shadow-md' },
       { label: 'LG', value: 'shadow-lg' },
-      { label: 'XL', value: 'shadow-xl' }
+      { label: 'XL', value: 'shadow-xl' },
+      { label: '2XL', value: 'shadow-2xl' },
+      { label: 'Inner', value: 'shadow-inner' }
     ]
   },
   {
     key: 'padding',
     label: 'Padding',
-    matcher: /^p-(0|1|2|3|4|6|8|10|12)$/,
+    matcher: /^p-(0|0\.5|1|1\.5|2|2\.5|3|3\.5|4|5|6|7|8|9|10|11|12|14|16|20|24|28|32)$/,
     options: [
       { label: '0', value: 'p-0' },
+      { label: '1', value: 'p-1' },
       { label: '2', value: 'p-2' },
+      { label: '3', value: 'p-3' },
       { label: '4', value: 'p-4' },
+      { label: '5', value: 'p-5' },
       { label: '6', value: 'p-6' },
-      { label: '8', value: 'p-8' }
+      { label: '8', value: 'p-8' },
+      { label: '10', value: 'p-10' },
+      { label: '12', value: 'p-12' },
+      { label: '16', value: 'p-16' }
     ]
   },
   {
     key: 'layout',
     label: 'Layout Mode',
-    matcher: /^(block|flex|grid)$/,
+    matcher: /^(block|inline-block|inline|flex|inline-flex|grid|inline-grid)$/,
     options: [
       { label: 'Block', value: 'block' },
+      { label: 'Inline', value: 'inline' },
       { label: 'Flex', value: 'flex' },
-      { label: 'Grid', value: 'grid' }
+      { label: 'IFlex', value: 'inline-flex' },
+      { label: 'Grid', value: 'grid' },
+      { label: 'IGrid', value: 'inline-grid' }
     ]
   },
   {
     key: 'direction',
     label: 'Direction',
-    matcher: /^flex-(row|col)$/,
+    matcher: /^flex-(row|row-reverse|col|col-reverse)$/,
     options: [
       { label: 'Row', value: 'flex-row' },
-      { label: 'Column', value: 'flex-col' }
+      { label: 'Row Rev', value: 'flex-row-reverse' },
+      { label: 'Column', value: 'flex-col' },
+      { label: 'Col Rev', value: 'flex-col-reverse' }
     ]
   },
   {
     key: 'justify',
     label: 'Justify',
-    matcher: /^justify-(start|center|end|between|around|evenly)$/,
+    matcher: /^justify-(normal|start|center|end|between|around|evenly|stretch)$/,
     options: [
+      { label: 'Normal', value: 'justify-normal' },
       { label: 'Start', value: 'justify-start' },
       { label: 'Center', value: 'justify-center' },
       { label: 'End', value: 'justify-end' },
-      { label: 'Between', value: 'justify-between' }
+      { label: 'Between', value: 'justify-between' },
+      { label: 'Around', value: 'justify-around' },
+      { label: 'Evenly', value: 'justify-evenly' }
     ]
   },
   {
@@ -228,37 +254,62 @@ const TAILWIND_CLASS_GROUPS: TailwindClassGroup[] = [
   {
     key: 'gap',
     label: 'Gap',
-    matcher: /^gap-(0|1|2|3|4|6|8|10|12)$/,
+    matcher: /^gap-(0|0\.5|1|1\.5|2|2\.5|3|3\.5|4|5|6|7|8|9|10|11|12|14|16)$/,
     options: [
       { label: '0', value: 'gap-0' },
+      { label: '1', value: 'gap-1' },
       { label: '2', value: 'gap-2' },
+      { label: '3', value: 'gap-3' },
       { label: '4', value: 'gap-4' },
       { label: '6', value: 'gap-6' },
-      { label: '8', value: 'gap-8' }
+      { label: '8', value: 'gap-8' },
+      { label: '10', value: 'gap-10' },
+      { label: '12', value: 'gap-12' }
     ]
   },
   {
     key: 'width',
     label: 'Width',
-    matcher: /^w-(auto|full|screen|fit|min|max)$/,
+    matcher: /^w-(auto|px|0|1\/2|1\/3|2\/3|1\/4|2\/4|3\/4|1\/5|2\/5|3\/5|4\/5|full|screen|svw|lvw|dvw|fit|min|max|96|80|72|64|56|48|40|32|24|20|16)$/,
     options: [
       { label: 'Auto', value: 'w-auto' },
+      { label: '1/2', value: 'w-1/2' },
+      { label: '1/3', value: 'w-1/3' },
+      { label: '2/3', value: 'w-2/3' },
+      { label: '1/4', value: 'w-1/4' },
+      { label: '3/4', value: 'w-3/4' },
       { label: 'Fit', value: 'w-fit' },
       { label: 'Full', value: 'w-full' },
-      { label: 'Screen', value: 'w-screen' }
+      { label: 'Screen', value: 'w-screen' },
+      { label: '64', value: 'w-64' },
+      { label: '80', value: 'w-80' },
+      { label: '96', value: 'w-96' }
     ]
   },
   {
     key: 'maxWidth',
     label: 'Max Width',
-    matcher: /^max-w-(none|full|screen-sm|screen-md|screen-lg|screen-xl|screen-2xl|prose)$/,
+    matcher: /^max-w-(none|full|screen-sm|screen-md|screen-lg|screen-xl|screen-2xl|prose|xs|sm|md|lg|xl|2xl|3xl|4xl|5xl|6xl|7xl)$/,
     options: [
       { label: 'None', value: 'max-w-none' },
+      { label: 'XS', value: 'max-w-xs' },
+      { label: 'SM', value: 'max-w-sm' },
+      { label: 'MD', value: 'max-w-md' },
+      { label: 'LG', value: 'max-w-lg' },
+      { label: 'XL', value: 'max-w-xl' },
+      { label: '2XL', value: 'max-w-2xl' },
+      { label: '3XL', value: 'max-w-3xl' },
+      { label: '4XL', value: 'max-w-4xl' },
+      { label: '5XL', value: 'max-w-5xl' },
+      { label: '6XL', value: 'max-w-6xl' },
+      { label: '7XL', value: 'max-w-7xl' },
+      { label: 'Full', value: 'max-w-full' },
       { label: 'Prose', value: 'max-w-prose' },
-      { label: 'SM', value: 'max-w-screen-sm' },
-      { label: 'MD', value: 'max-w-screen-md' },
-      { label: 'LG', value: 'max-w-screen-lg' },
-      { label: 'XL', value: 'max-w-screen-xl' }
+      { label: 'Screen SM', value: 'max-w-screen-sm' },
+      { label: 'Screen MD', value: 'max-w-screen-md' },
+      { label: 'Screen LG', value: 'max-w-screen-lg' },
+      { label: 'Screen XL', value: 'max-w-screen-xl' },
+      { label: 'Screen 2XL', value: 'max-w-screen-2xl' }
     ]
   }
 ]
@@ -352,7 +403,18 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
     var counter = 0;
     var active = null;
     var selector = 'h1,h2,h3,h4,h5,h6,p,li,a,button,span,img,section,article,div,main,aside,nav';
-    var sizeMap = { 'text-xs': '12px', 'text-sm': '14px', 'text-base': '16px', 'text-lg': '18px', 'text-xl': '20px', 'text-2xl': '24px' };
+    var sizeMap = {
+      'text-xs': '12px',
+      'text-sm': '14px',
+      'text-base': '16px',
+      'text-lg': '18px',
+      'text-xl': '20px',
+      'text-2xl': '24px',
+      'text-3xl': '30px',
+      'text-4xl': '36px',
+      'text-5xl': '48px',
+      'text-6xl': '60px'
+    };
     var colorMap = {
       'text-slate-700': '#334155',
       'text-slate-900': '#0f172a',
@@ -367,8 +429,30 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
       'bg-blue-600': '#2563eb',
       'bg-green-600': '#16a34a'
     };
-    var gapMap = { 'gap-0': '0px', 'gap-2': '8px', 'gap-4': '16px', 'gap-6': '24px', 'gap-8': '32px' };
-    var paddingMap = { 'p-0': '0px', 'p-2': '8px', 'p-4': '16px', 'p-6': '24px', 'p-8': '32px' };
+    var gapMap = {
+      'gap-0': '0px',
+      'gap-1': '4px',
+      'gap-2': '8px',
+      'gap-3': '12px',
+      'gap-4': '16px',
+      'gap-6': '24px',
+      'gap-8': '32px',
+      'gap-10': '40px',
+      'gap-12': '48px'
+    };
+    var paddingMap = {
+      'p-0': '0px',
+      'p-1': '4px',
+      'p-2': '8px',
+      'p-3': '12px',
+      'p-4': '16px',
+      'p-5': '20px',
+      'p-6': '24px',
+      'p-8': '32px',
+      'p-10': '40px',
+      'p-12': '48px',
+      'p-16': '64px'
+    };
     var radiusMap = { 'rounded-none': '0px', 'rounded-sm': '2px', 'rounded-md': '6px', 'rounded-lg': '8px', 'rounded-xl': '12px', 'rounded-full': '9999px' };
     var shadowMap = {
       'shadow-none': 'none',
@@ -433,18 +517,39 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
         if(paddingMap[token]) el.style.padding = paddingMap[token];
         if(radiusMap[token]) el.style.borderRadius = radiusMap[token];
         if(shadowMap[token]) el.style.boxShadow = shadowMap[token];
-        if(token === 'w-auto' || token === 'w-fit' || token === 'w-full' || token === 'w-screen') {
+        if(token === 'w-auto' || token === 'w-fit' || token === 'w-full' || token === 'w-screen' || token === 'w-1/2' || token === 'w-1/3' || token === 'w-2/3' || token === 'w-1/4' || token === 'w-3/4' || token === 'w-64' || token === 'w-80' || token === 'w-96') {
           if(token === 'w-auto') el.style.width = 'auto';
           if(token === 'w-fit') el.style.width = 'fit-content';
           if(token === 'w-full') el.style.width = '100%';
           if(token === 'w-screen') el.style.width = '100vw';
+          if(token === 'w-1/2') el.style.width = '50%';
+          if(token === 'w-1/3') el.style.width = '33.333333%';
+          if(token === 'w-2/3') el.style.width = '66.666667%';
+          if(token === 'w-1/4') el.style.width = '25%';
+          if(token === 'w-3/4') el.style.width = '75%';
+          if(token === 'w-64') el.style.width = '16rem';
+          if(token === 'w-80') el.style.width = '20rem';
+          if(token === 'w-96') el.style.width = '24rem';
         }
         if(token === 'max-w-none') el.style.maxWidth = 'none';
+        if(token === 'max-w-xs') el.style.maxWidth = '20rem';
+        if(token === 'max-w-sm') el.style.maxWidth = '24rem';
+        if(token === 'max-w-md') el.style.maxWidth = '28rem';
+        if(token === 'max-w-lg') el.style.maxWidth = '32rem';
+        if(token === 'max-w-xl') el.style.maxWidth = '36rem';
+        if(token === 'max-w-2xl') el.style.maxWidth = '42rem';
+        if(token === 'max-w-3xl') el.style.maxWidth = '48rem';
+        if(token === 'max-w-4xl') el.style.maxWidth = '56rem';
+        if(token === 'max-w-5xl') el.style.maxWidth = '64rem';
+        if(token === 'max-w-6xl') el.style.maxWidth = '72rem';
+        if(token === 'max-w-7xl') el.style.maxWidth = '80rem';
+        if(token === 'max-w-full') el.style.maxWidth = '100%';
         if(token === 'max-w-prose') el.style.maxWidth = '65ch';
         if(token === 'max-w-screen-sm') el.style.maxWidth = '640px';
         if(token === 'max-w-screen-md') el.style.maxWidth = '768px';
         if(token === 'max-w-screen-lg') el.style.maxWidth = '1024px';
         if(token === 'max-w-screen-xl') el.style.maxWidth = '1280px';
+        if(token === 'max-w-screen-2xl') el.style.maxWidth = '1536px';
       });
     }
 
@@ -590,17 +695,23 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   }, [quickFilterLower])
   const activeTailwindGroups = useMemo(() => {
     const active = new Set<string>()
-    snapshotClassTokens.forEach((token) => {
-      const baseToken = splitVariantToken(token).base
-      for (const group of TAILWIND_CLASS_GROUPS) {
-        if (group.matcher.test(baseToken)) {
-          active.add(group.key)
-          break
-        }
+
+    TAILWIND_CLASS_GROUPS.forEach((group) => {
+      const isResponsiveGroup = RESPONSIVE_GROUP_KEYS.has(group.key)
+      const hasMatch = snapshotClassTokens.some((token) => {
+        const parsed = splitVariantToken(token)
+        if (isResponsiveGroup && parsed.prefix !== quickVariant) return false
+        if (!isResponsiveGroup && parsed.prefix !== '') return false
+        return group.matcher.test(parsed.base)
+      })
+
+      if (hasMatch) {
+        active.add(group.key)
       }
     })
+
     return active
-  }, [snapshotClassTokens])
+  }, [snapshotClassTokens, quickVariant])
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -1138,7 +1249,14 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
 
                           {filteredTailwindGroups.map((group) => {
                             const useVariant = RESPONSIVE_GROUP_KEYS.has(group.key) ? quickVariant : ''
-                            const activeCount = snapshotClassTokens.filter((token) => group.matcher.test(splitVariantToken(token).base)).length
+                            const activeCount = snapshotClassTokens.filter((token) => {
+                              const parsed = splitVariantToken(token)
+                              if (RESPONSIVE_GROUP_KEYS.has(group.key)) {
+                                return parsed.prefix === useVariant && group.matcher.test(parsed.base)
+                              }
+
+                              return parsed.prefix === '' && group.matcher.test(parsed.base)
+                            }).length
                             return (
                               <details key={group.key} className="rounded-md border bg-background" open={activeTailwindGroups.has(group.key)}>
                                 <summary className="flex cursor-pointer items-center justify-between px-2 py-1.5 text-[11px] font-medium text-muted-foreground">
