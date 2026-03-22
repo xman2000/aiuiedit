@@ -60,11 +60,16 @@ export function setupIPC() {
     await ensureaiuieditDir()
     try {
       const data = await fs.readFile(SETTINGS_FILE, 'utf-8')
-      return JSON.parse(data)
+      const settings = JSON.parse(data)
+      // If workspacePath is the default app directory, treat it as unset
+      if (settings.workspacePath === AIUIEDIT_DIR) {
+        settings.workspacePath = ''
+      }
+      return settings
     } catch {
-      // Return default settings
+      // Return default settings with NO workspace (force user to select)
       return {
-        workspacePath: AIUIEDIT_DIR,
+        workspacePath: '',
         theme: 'system',
         aiModel: 'kimi-latest',
         recentProjects: [],
