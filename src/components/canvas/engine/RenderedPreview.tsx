@@ -21,18 +21,83 @@ interface RenderedPreviewProps {
 
 type PreviewMode = 'embedded' | 'snapshot'
 
+interface SnapshotSelection {
+  id: string
+  tag: string
+  text: string
+}
+
 function joinPreviewUrl(base: string, route: string): string {
   const normalizedBase = base.trim().replace(/\/+$/, '')
   const normalizedRoute = route.startsWith('/') ? route : `/${route}`
   return `${normalizedBase}${normalizedRoute}`
 }
 
-function injectBaseTag(html: string, url: string): string {
+function injectInstrumentedSnapshot(html: string, url: string): string {
+  const sanitizedHtml = html
+    .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<link\b[^>]*rel=["']modulepreload["'][^>]*>/gi, ' ')
+
   const baseTag = `<base href="${url.replace(/"/g, '&quot;')}" />`
-  if (/<head\b[^>]*>/i.test(html)) {
-    return html.replace(/<head\b[^>]*>/i, (match) => `${match}${baseTag}`)
+  const instrumentationScript = `<script>(function(){
+    var counter = 0;
+    var active = null;
+    var selector = 'h1,h2,h3,h4,h5,h6,p,li,a,button,span';
+    function mark(el){
+      if(active){ active.style.outline = ''; active.style.outlineOffset = ''; }
+      active = el;
+      if(active){ active.style.outline = '2px solid #2563eb'; active.style.outlineOffset = '2px'; }
+    }
+    document.querySelectorAll(selector).forEach(function(el){
+      var text = (el.textContent || '').trim();
+      if(text.length < 2) return;
+      counter += 1;
+      el.setAttribute('data-aiuiedit-id', 'aiuiedit-' + counter);
+      el.style.cursor = 'pointer';
+    });
+
+    document.addEventListener('click', function(event){
+      var target = event.target;
+      if(!target || !target.closest) return;
+      var el = target.closest('[data-aiuiedit-id]');
+      if(!el) return;
+      event.preventDefault();
+      event.stopPropagation();
+      mark(el);
+      window.parent.postMessage({
+        type: 'aiuiedit-select',
+        payload: {
+          id: el.getAttribute('data-aiuiedit-id'),
+          tag: (el.tagName || '').toLowerCase(),
+          text: (el.textContent || '').trim()
+        }
+      }, '*');
+    }, true);
+
+    window.addEventListener('message', function(event){
+      var data = event.data || {};
+      if(data.type !== 'aiuiedit-apply-text') return;
+      var payload = data.payload || {};
+      var id = payload.id;
+      var text = payload.text || '';
+      if(!id) return;
+      var el = document.querySelector('[data-aiuiedit-id="' + id + '"]');
+      if(!el) return;
+      el.textContent = text;
+      window.parent.postMessage({
+        type: 'aiuiedit-updated',
+        payload: {
+          id: id,
+          text: text
+        }
+      }, '*');
+    });
+  })();</script>`
+
+  if (/<head\b[^>]*>/i.test(sanitizedHtml)) {
+    return sanitizedHtml.replace(/<head\b[^>]*>/i, (match) => `${match}${baseTag}`) + instrumentationScript
   }
-  return `<!doctype html><html><head>${baseTag}</head><body>${html}</body></html>`
+  return `<!doctype html><html><head>${baseTag}</head><body>${sanitizedHtml}</body>${instrumentationScript}</html>`
 }
 
 export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }: RenderedPreviewProps) {
@@ -53,7 +118,10 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [previewMode, setPreviewMode] = useState<PreviewMode>('embedded')
   const [statusMessage, setStatusMessage] = useState('')
   const [embeddedLoaded, setEmbeddedLoaded] = useState(false)
+  const [snapshotSelection, setSnapshotSelection] = useState<SnapshotSelection | null>(null)
+  const [snapshotEditText, setSnapshotEditText] = useState('')
   const timeoutRef = useRef<number | null>(null)
+  const snapshotIframeRef = useRef<HTMLIFrameElement | null>(null)
 
   const route = currentPage?.route || '/'
   const isRoutePreviewable = route.startsWith('/')
@@ -66,8 +134,33 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
 
   const snapshotDocument = useMemo(() => {
     if (!snapshotHtml || !previewUrl) return ''
-    return injectBaseTag(snapshotHtml, previewUrl)
+    return injectInstrumentedSnapshot(snapshotHtml, previewUrl)
   }, [snapshotHtml, previewUrl])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.source !== snapshotIframeRef.current?.contentWindow) return
+      const data = event.data as any
+      if (!data?.type) return
+
+      if (data.type === 'aiuiedit-select' && data.payload) {
+        const selected: SnapshotSelection = {
+          id: data.payload.id,
+          tag: data.payload.tag,
+          text: data.payload.text || ''
+        }
+        setSnapshotSelection(selected)
+        setSnapshotEditText(selected.text)
+      }
+
+      if (data.type === 'aiuiedit-updated' && data.payload && snapshotSelection?.id === data.payload.id) {
+        setSnapshotSelection((prev) => prev ? { ...prev, text: data.payload.text || prev.text } : prev)
+      }
+    }
+
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [snapshotSelection?.id])
 
   const hints = useMemo(() => {
     const framework = currentProject?.source?.framework
@@ -162,6 +255,18 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
     }
   }
 
+  const applySnapshotTextEdit = () => {
+    if (!snapshotSelection?.id || !snapshotIframeRef.current?.contentWindow) return
+    snapshotIframeRef.current.contentWindow.postMessage({
+      type: 'aiuiedit-apply-text',
+      payload: {
+        id: snapshotSelection.id,
+        text: snapshotEditText
+      }
+    }, '*')
+    setStatusMessage('Updated snapshot text (visual edit only). Use Capture to Canvas to bring changes into design mode.')
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b bg-card p-3">
@@ -234,13 +339,33 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             }}
           />
         ) : snapshotDocument ? (
-          <iframe
-            key={`snapshot-${previewUrl}-${refreshToken}`}
-            srcDoc={snapshotDocument}
-            title="Snapshot Preview"
-            className="h-full w-full border-0"
-            sandbox="allow-scripts allow-forms"
-          />
+          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_320px]">
+            <iframe
+              ref={snapshotIframeRef}
+              key={`snapshot-${previewUrl}-${refreshToken}`}
+              srcDoc={snapshotDocument}
+              title="Snapshot Preview"
+              className="h-full w-full border-0"
+              sandbox="allow-scripts allow-forms"
+            />
+            <div className="border-l bg-card p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Snapshot Inspector</p>
+              {snapshotSelection ? (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">Tag: <span className="font-mono text-foreground">{snapshotSelection.tag}</span></p>
+                  <textarea
+                    value={snapshotEditText}
+                    onChange={(e) => setSnapshotEditText(e.target.value)}
+                    className="h-36 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                  />
+                  <Button size="sm" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
+                  <p className="text-[11px] text-muted-foreground">This edits the rendered snapshot for review. Then click Capture to Canvas to continue editing in design mode.</p>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">Click any text element in the snapshot to inspect/edit it.</p>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center">
             <p className="text-sm text-muted-foreground">Loading snapshot preview...</p>
