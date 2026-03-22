@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/common/Button'
 import { Download, ExternalLink, RefreshCcw } from 'lucide-react'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { useAppStore } from '@/store/useAppStore'
 import { useProjectStore } from '@/store/useProjectStore'
 import type { Page, Project } from '@/types'
@@ -926,210 +927,225 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             }}
           />
         ) : snapshotDocument ? (
-          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_360px_320px]">
-            <iframe
-              ref={snapshotIframeRef}
-              key={`snapshot-${previewUrl}-${refreshToken}`}
-              srcDoc={snapshotDocument}
-              title="Snapshot Preview"
-              className="h-full w-full border-0"
-              sandbox="allow-scripts allow-forms"
-            />
-            <div className="flex h-full min-h-0 flex-col border-l bg-card p-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Snapshot Inspector</p>
-              {snapshotSelection ? (
-                <div className="mt-3 flex min-h-0 flex-1 flex-col">
-                  <p className="text-xs text-muted-foreground">Tag: <span className="font-mono text-foreground">{snapshotSelection.tag}</span></p>
-                  {snapshotSelection.isStructural && (
-                    <p className="mt-1 text-[11px] text-muted-foreground">Container/card mode: edit classes and attributes here; text editing is disabled to avoid flattening child content.</p>
-                  )}
+          <PanelGroup direction="horizontal" className="h-full min-h-0">
+            <Panel defaultSize={58} minSize={35}>
+              <iframe
+                ref={snapshotIframeRef}
+                key={`snapshot-${previewUrl}-${refreshToken}`}
+                srcDoc={snapshotDocument}
+                title="Snapshot Preview"
+                className="h-full w-full border-0"
+                sandbox="allow-scripts allow-forms"
+              />
+            </Panel>
 
-                  <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Content</p>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text</label>
-                      <textarea
-                        value={snapshotEditText}
-                        onChange={(e) => setSnapshotEditText(e.target.value)}
-                        disabled={snapshotSelection.isStructural || snapshotSelection.tag === 'img'}
-                        className="h-28 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
-                      />
-                      {(snapshotSelection.tag === 'a' || snapshotSelection.attributes.href !== undefined) && (
-                        <>
-                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Href</label>
-                          <input type="text" value={snapshotHref} onChange={(e) => setSnapshotHref(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                        </>
-                      )}
-                      {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.src !== undefined) && (
-                        <>
-                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Src</label>
-                          <input type="text" value={snapshotSrc} onChange={(e) => setSnapshotSrc(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                        </>
-                      )}
-                      {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.alt !== undefined) && (
-                        <>
-                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Alt</label>
-                          <input type="text" value={snapshotAlt} onChange={(e) => setSnapshotAlt(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
-                        </>
-                      )}
-                    </div>
+            <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50" />
 
-                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Classes</p>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
-                      <input
-                        type="text"
-                        value={snapshotClassName}
-                        onChange={(e) => {
-                          const nextClassName = e.target.value
-                          setSnapshotClassName(nextClassName)
-                          postSnapshotAttributeUpdate({ className: nextClassName })
-                        }}
-                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
-                      />
-                      <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
-                        {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
-                          <div key={token} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-                            <span>{token}</span>
-                            <button
-                              type="button"
-                              onClick={() => removeClassToken(token)}
-                              className="rounded px-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground"
-                              title={`Remove ${token}`}
-                              aria-label={`Remove ${token}`}
-                            >
-                              x
-                            </button>
-                          </div>
-                        )) : (
-                          <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
+            <Panel defaultSize={42} minSize={24}>
+              <PanelGroup direction="horizontal" className="h-full min-h-0">
+                <Panel defaultSize={44} minSize={28}>
+                  <div className="flex h-full min-h-0 flex-col bg-card p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Content</p>
+                    {snapshotSelection ? (
+                      <div className="mt-3 flex min-h-0 flex-1 flex-col">
+                        <p className="text-xs text-muted-foreground">Tag: <span className="font-mono text-foreground">{snapshotSelection.tag}</span></p>
+                        {snapshotSelection.isStructural && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">Container/card mode: text editing disabled; use style/layout controls.</p>
                         )}
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/20 p-2">
-                      <p className="col-span-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Typography / Inline CSS</p>
-                      <div>
-                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Family</label>
-                        <input
-                          type="text"
-                          value={snapshotStyleMap['font-family'] || ''}
-                          onChange={(e) => applyInlineStyleValue('font-family', e.target.value)}
-                          placeholder="Inter, serif, etc"
-                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Size</label>
-                        <input
-                          type="text"
-                          value={snapshotStyleMap['font-size'] || ''}
-                          onChange={(e) => applyInlineStyleValue('font-size', e.target.value)}
-                          placeholder="16px"
-                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Weight</label>
-                        <input
-                          type="text"
-                          value={snapshotStyleMap['font-weight'] || ''}
-                          onChange={(e) => applyInlineStyleValue('font-weight', e.target.value)}
-                          placeholder="400 / bold"
-                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Line Height</label>
-                        <input
-                          type="text"
-                          value={snapshotStyleMap['line-height'] || ''}
-                          onChange={(e) => applyInlineStyleValue('line-height', e.target.value)}
-                          placeholder="1.5"
-                          className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Inline Style</label>
-                        <textarea
-                          value={snapshotStyle}
-                          onChange={(e) => {
-                            const nextStyle = e.target.value
-                            setSnapshotStyle(nextStyle)
-                            postSnapshotAttributeUpdate({ style: nextStyle })
-                          }}
-                          placeholder="font-family: Inter; font-size: 18px;"
-                          className="h-20 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                        <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                          <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text</label>
+                            <textarea
+                              value={snapshotEditText}
+                              onChange={(e) => setSnapshotEditText(e.target.value)}
+                              disabled={snapshotSelection.isStructural || snapshotSelection.tag === 'img'}
+                              className="h-28 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                            />
+                            {(snapshotSelection.tag === 'a' || snapshotSelection.attributes.href !== undefined) && (
+                              <>
+                                <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Href</label>
+                                <input type="text" value={snapshotHref} onChange={(e) => setSnapshotHref(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                              </>
+                            )}
+                            {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.src !== undefined) && (
+                              <>
+                                <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Src</label>
+                                <input type="text" value={snapshotSrc} onChange={(e) => setSnapshotSrc(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                              </>
+                            )}
+                            {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.alt !== undefined) && (
+                              <>
+                                <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Alt</label>
+                                <input type="text" value={snapshotAlt} onChange={(e) => setSnapshotAlt(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                              </>
+                            )}
+                          </div>
+                        </div>
 
-                  <div className="mt-2 space-y-2 border-t pt-2">
-                    <Button size="sm" variant="outline" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
-                    <Button size="sm" className="w-full" onClick={applySnapshotElementEditToSource} disabled={!currentProject?.source?.roundTrip}>
-                      Apply to Source
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground">Apply to Source writes atomic text/attribute patches to the mapped page file, then refreshes snapshot.</p>
-                  </div>
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-muted-foreground">Click any text element, image, or container/card in the snapshot to inspect/edit it.</p>
-              )}
-            </div>
-            <div className="flex h-full min-h-0 flex-col border-l bg-card p-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Class Tools</p>
-              {snapshotSelection ? (
-                <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-                  <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
-                    {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                      <div key={group.key}>
-                        <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                        <div className="flex flex-wrap gap-1">
-                          {group.options.map((option) => {
-                            const isActive = snapshotClassTokens.includes(option.value)
-                            return (
-                              <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                {option.label}
-                              </button>
-                            )
-                          })}
+                        <div className="mt-2 space-y-2 border-t pt-2">
+                          <Button size="sm" variant="outline" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
+                          <Button size="sm" className="w-full" onClick={applySnapshotElementEditToSource} disabled={!currentProject?.source?.roundTrip}>
+                            Apply to Source
+                          </Button>
+                          <p className="text-[11px] text-muted-foreground">Apply to Source writes atomic text/attribute patches to the mapped page file, then refreshes snapshot.</p>
                         </div>
                       </div>
-                    ))}
+                    ) : (
+                      <p className="mt-3 text-xs text-muted-foreground">Click any text element, image, or container/card in the snapshot to inspect/edit it.</p>
+                    )}
                   </div>
+                </Panel>
 
-                  <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
-                    {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                      <div key={group.key}>
-                        <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                        {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
-                          <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
-                            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
-                            <div className="flex flex-wrap gap-1">
-                              {group.options.map((option) => {
-                                const classToken = `${variant.prefix}${option.value}`
-                                const isActive = snapshotClassTokens.includes(classToken)
-                                return (
-                                  <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                    {option.label}
-                                  </button>
-                                )
-                              })}
-                            </div>
+                <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50" />
+
+                <Panel defaultSize={56} minSize={30}>
+                  <div className="flex h-full min-h-0 flex-col border-l bg-card p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Style & Layout</p>
+                    {snapshotSelection ? (
+                      <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Classes</p>
+                          <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
+                          <input
+                            type="text"
+                            value={snapshotClassName}
+                            onChange={(e) => {
+                              const nextClassName = e.target.value
+                              setSnapshotClassName(nextClassName)
+                              postSnapshotAttributeUpdate({ className: nextClassName })
+                            }}
+                            className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                          />
+                          <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
+                            {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
+                              <div key={token} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
+                                <span>{token}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeClassToken(token)}
+                                  className="rounded px-1 text-[10px] text-muted-foreground hover:bg-background hover:text-foreground"
+                                  title={`Remove ${token}`}
+                                  aria-label={`Remove ${token}`}
+                                >
+                                  x
+                                </button>
+                              </div>
+                            )) : (
+                              <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
+                            )}
                           </div>
-                        ))}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/20 p-2">
+                          <p className="col-span-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Typography / Inline CSS</p>
+                          <div>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Family</label>
+                            <input
+                              type="text"
+                              value={snapshotStyleMap['font-family'] || ''}
+                              onChange={(e) => applyInlineStyleValue('font-family', e.target.value)}
+                              placeholder="Inter, serif, etc"
+                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Size</label>
+                            <input
+                              type="text"
+                              value={snapshotStyleMap['font-size'] || ''}
+                              onChange={(e) => applyInlineStyleValue('font-size', e.target.value)}
+                              placeholder="16px"
+                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Font Weight</label>
+                            <input
+                              type="text"
+                              value={snapshotStyleMap['font-weight'] || ''}
+                              onChange={(e) => applyInlineStyleValue('font-weight', e.target.value)}
+                              placeholder="400 / bold"
+                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Line Height</label>
+                            <input
+                              type="text"
+                              value={snapshotStyleMap['line-height'] || ''}
+                              onChange={(e) => applyInlineStyleValue('line-height', e.target.value)}
+                              placeholder="1.5"
+                              className="w-full rounded-md border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:border-primary"
+                            />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Inline Style</label>
+                            <textarea
+                              value={snapshotStyle}
+                              onChange={(e) => {
+                                const nextStyle = e.target.value
+                                setSnapshotStyle(nextStyle)
+                                postSnapshotAttributeUpdate({ style: nextStyle })
+                              }}
+                              placeholder="font-family: Inter; font-size: 18px;"
+                              className="h-20 w-full rounded-md border bg-background px-2 py-1.5 font-mono text-xs text-foreground outline-none focus:border-primary"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
+                          {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                            <div key={group.key}>
+                              <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
+                              <div className="flex flex-wrap gap-1">
+                                {group.options.map((option) => {
+                                  const isActive = snapshotClassTokens.includes(option.value)
+                                  return (
+                                    <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                      {option.label}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
+                          {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                            <div key={group.key}>
+                              <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
+                              {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
+                                <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
+                                  <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {group.options.map((option) => {
+                                      const classToken = `${variant.prefix}${option.value}`
+                                      const isActive = snapshotClassTokens.includes(classToken)
+                                      return (
+                                        <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                          {option.label}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
+                    ) : (
+                      <p className="mt-3 text-xs text-muted-foreground">Select an element in snapshot to show style/layout controls.</p>
+                    )}
                   </div>
-                </div>
-              ) : (
-                <p className="mt-3 text-xs text-muted-foreground">Select an element in snapshot to show style/layout quick actions.</p>
-              )}
-            </div>
-          </div>
+                </Panel>
+              </PanelGroup>
+            </Panel>
+          </PanelGroup>
         ) : (
           <div className="flex h-full items-center justify-center p-6 text-center">
             <p className="text-sm text-muted-foreground">Loading snapshot preview...</p>

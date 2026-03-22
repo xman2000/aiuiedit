@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff, Lock, Unlock, MoveLeft, MoveRight, MoveUp, MoveDown, ChevronUp, ChevronDown, Trash2 } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { useCanvasStore } from '@/store/useCanvasStore'
@@ -11,6 +11,14 @@ interface LayoutViewProps {
 }
 
 type DropPosition = 'before' | 'inside' | 'after' | 'root'
+
+interface CanvasDragState {
+  nodeId: string
+  startClientX: number
+  startClientY: number
+  startX: number
+  startY: number
+}
 
 function readDimension(value: number | string, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -40,6 +48,8 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
 
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null)
   const [dropHint, setDropHint] = useState<{ id: string; position: DropPosition } | null>(null)
+  const [canvasDrag, setCanvasDrag] = useState<CanvasDragState | null>(null)
+  const stageRef = useRef<HTMLDivElement | null>(null)
 
   const isTypingTarget = (target: EventTarget | null): boolean => {
     if (!(target instanceof HTMLElement)) return false
@@ -360,6 +370,36 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [selectedNode, moveSelectedAmongSiblings, indentSelected, outdentSelected, nudgeSelected])
 
+  useEffect(() => {
+    if (!canvasDrag) return
+
+    const onMouseMove = (event: MouseEvent) => {
+      const dx = event.clientX - canvasDrag.startClientX
+      const dy = event.clientY - canvasDrag.startClientY
+      const nextX = Math.max(0, canvasDrag.startX + dx)
+      const nextY = Math.max(0, canvasDrag.startY + dy)
+      updateNode(canvasDrag.nodeId, {
+        position: {
+          x: Math.round(nextX),
+          y: Math.round(nextY)
+        }
+      })
+    }
+
+    const onMouseUp = () => {
+      pushHistory()
+      setDirty(true)
+      setCanvasDrag(null)
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [canvasDrag, updateNode, pushHistory, setDirty])
+
   const renderDropLine = (targetId: string, position: DropPosition) => (
     <div
       key={`${targetId}-${position}`}
@@ -467,7 +507,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
   const rootNodes = childrenByParent.get(null) || []
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[340px_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 grid-cols-[320px_minmax(0,1fr)_360px]">
       <div
         className="flex min-h-0 flex-col border-r bg-card p-3"
         onDragOver={(event) => {
@@ -491,7 +531,100 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-col bg-background p-4">
+      <div className="min-h-0 bg-muted/20 p-4">
+        <div
+          ref={stageRef}
+          className="relative h-full min-h-0 overflow-auto rounded-lg border bg-background"
+          onClick={() => deselectAll()}
+          onDragOver={(event) => {
+            if (event.dataTransfer.types.includes('component-type') || draggedNodeId) {
+              event.preventDefault()
+            }
+          }}
+          onDrop={(event) => {
+            event.preventDefault()
+            const rect = stageRef.current?.getBoundingClientRect()
+            const dropX = rect ? Math.max(0, event.clientX - rect.left - 24) : 64
+            const dropY = rect ? Math.max(0, event.clientY - rect.top - 24) : 64
+
+            const componentType = event.dataTransfer.getData('component-type')
+            if (componentType && currentPage) {
+              const created = createCanvasNode(componentType, currentPage.id, {
+                x: Math.round(dropX),
+                y: Math.round(dropY)
+              })
+              if (!created) return
+              commitNodeMap((draft) => {
+                draft.set(created.id, created)
+              })
+              selectNode(created.id)
+              return
+            }
+
+            if (!draggedNodeId) return
+            const dragging = pageNodeMap.get(draggedNodeId)
+            if (!dragging) return
+            updateNode(dragging.id, {
+              parentId: null,
+              position: {
+                x: Math.round(dropX),
+                y: Math.round(dropY)
+              }
+            })
+            pushHistory()
+            setDirty(true)
+            setDraggedNodeId(null)
+          }}
+        >
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b bg-card px-3 py-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Layout Canvas</p>
+            <p className="text-[11px] text-muted-foreground">Drag elements directly on canvas to reposition</p>
+          </div>
+
+          <div className="relative min-h-[900px]">
+            {pageNodes.map((node) => {
+              const isSelected = selectedIds.has(node.id)
+              const width = readDimension(node.size.width, 140)
+              const height = readDimension(node.size.height, 48)
+              return (
+                <div
+                  key={node.id}
+                  className={isSelected
+                    ? 'absolute cursor-move rounded border-2 border-primary bg-primary/10 px-2 py-1 shadow-sm'
+                    : 'absolute cursor-move rounded border border-border bg-card px-2 py-1 shadow-sm hover:border-primary/60'}
+                  style={{
+                    left: `${node.position.x}px`,
+                    top: `${node.position.y}px`,
+                    width: `${Math.max(80, width)}px`,
+                    minHeight: `${Math.max(30, height)}px`
+                  }}
+                  onMouseDown={(event) => {
+                    event.stopPropagation()
+                    if (node.locked) return
+                    selectNode(node.id, event.metaKey || event.ctrlKey)
+                    setCanvasDrag({
+                      nodeId: node.id,
+                      startClientX: event.clientX,
+                      startClientY: event.clientY,
+                      startX: node.position.x,
+                      startY: node.position.y
+                    })
+                  }}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    selectNode(node.id, event.metaKey || event.ctrlKey)
+                  }}
+                >
+                  <div className="truncate text-xs font-medium text-foreground">{node.name || node.type}</div>
+                  <div className="truncate font-mono text-[10px] text-muted-foreground">{node.type}</div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex min-h-0 flex-col border-l bg-background p-4">
         <p className="text-sm font-medium">Layout Controls</p>
         {selectedNode ? (
           <div className="mt-3 grid min-h-0 flex-1 grid-cols-2 gap-3 overflow-y-auto pr-1">
