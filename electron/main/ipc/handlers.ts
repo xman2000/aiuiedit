@@ -518,37 +518,6 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
     return { framework: 'nextjs', entryFile: discoveredNextEntry }
   }
 
-  const viteConfig = await findFirstExisting([
-    join(sourceRoot, 'vite.config.ts'),
-    join(sourceRoot, 'vite.config.js'),
-    join(sourceRoot, 'vite.config.mjs')
-  ])
-  const viteEntry = await findFirstExisting([
-    join(sourceRoot, 'src', 'App.tsx'),
-    join(sourceRoot, 'src', 'App.jsx'),
-    join(sourceRoot, 'src', 'App.js'),
-    join(sourceRoot, 'src', 'main.tsx'),
-    join(sourceRoot, 'src', 'main.jsx'),
-    join(sourceRoot, 'src', 'main.js')
-  ])
-
-  if (viteConfig || viteEntry) {
-    if (viteEntry) {
-      return { framework: 'react-vite', entryFile: viteEntry }
-    }
-
-    const discoveredViteEntry = await findFirstFileInTree(sourceRoot, [
-      'src/App.tsx',
-      'src/App.jsx',
-      'src/App.js',
-      'src/main.tsx',
-      'src/main.jsx',
-      'src/main.js'
-    ])
-
-    return { framework: 'react-vite', entryFile: discoveredViteEntry }
-  }
-
   const laravelSignals = await findFirstExisting([
     join(sourceRoot, 'artisan'),
     join(sourceRoot, 'composer.json')
@@ -593,6 +562,47 @@ async function detectFramework(sourceRoot: string): Promise<{ framework: Support
     ])
 
     return { framework: 'laravel', entryFile: discoveredLaravelEntry }
+  }
+
+  const viteConfig = await findFirstExisting([
+    join(sourceRoot, 'vite.config.ts'),
+    join(sourceRoot, 'vite.config.js'),
+    join(sourceRoot, 'vite.config.mjs')
+  ])
+  const viteEntry = await findFirstExisting([
+    join(sourceRoot, 'src', 'App.tsx'),
+    join(sourceRoot, 'src', 'App.jsx'),
+    join(sourceRoot, 'src', 'App.js'),
+    join(sourceRoot, 'src', 'main.tsx'),
+    join(sourceRoot, 'src', 'main.jsx'),
+    join(sourceRoot, 'src', 'main.js'),
+    join(sourceRoot, 'resources', 'js', 'app.tsx'),
+    join(sourceRoot, 'resources', 'js', 'app.jsx'),
+    join(sourceRoot, 'resources', 'js', 'app.ts'),
+    join(sourceRoot, 'resources', 'js', 'app.js')
+  ])
+
+  if (viteConfig || viteEntry) {
+    if (viteEntry) {
+      return { framework: 'react-vite', entryFile: viteEntry }
+    }
+
+    const discoveredViteEntry = await findFirstFileInTree(sourceRoot, [
+      'src/App.tsx',
+      'src/App.jsx',
+      'src/App.js',
+      'src/main.tsx',
+      'src/main.jsx',
+      'src/main.js',
+      'resources/js/app.tsx',
+      'resources/js/app.jsx',
+      'resources/js/app.ts',
+      'resources/js/app.js'
+    ])
+
+    if (discoveredViteEntry) {
+      return { framework: 'react-vite', entryFile: discoveredViteEntry }
+    }
   }
 
   const staticEntry = await findFirstExisting([
