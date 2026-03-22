@@ -6,6 +6,9 @@ import { Button } from '@/components/common/Button'
 import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
 import { createCanvasNode } from '@/core/canvasNodeFactory'
 import { useProjectStore } from '@/store/useProjectStore'
+import { useAppStore } from '@/store/useAppStore'
+import { RenderedPreview } from './RenderedPreview'
+import type { CanvasNode } from '@/types'
 
 export function Canvas() {
   const canvasRef = useRef<HTMLDivElement>(null)
@@ -17,9 +20,13 @@ export function Canvas() {
     setZoom, 
     setViewport, 
     selectNode,
-    addNode
+    addNode,
+    setNodes,
+    deselectAll,
+    pushHistory
   } = useCanvasStore()
   const { currentProject, currentPage, setDirty } = useProjectStore()
+  const { settings, setSettings } = useAppStore()
 
   const currentPageNodes = currentPage
     ? Array.from(nodes.values()).filter((node) => node.visible && (node.pageId || currentPage.id) === currentPage.id)
@@ -97,6 +104,95 @@ export function Canvas() {
     useCanvasStore.getState().selectNode(newNode.id)
   }, [currentProject, currentPage, addNode, setDirty])
 
+  const applyRenderedCapture = useCallback((payload: { title: string; blocks: Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }> }) => {
+    if (!currentPage) return
+
+    const keptNodes = Array.from(nodes.values()).filter((node) => node.pageId !== currentPage.id)
+    const nextNodes = new Map<string, CanvasNode>()
+
+    keptNodes.forEach((node) => nextNodes.set(node.id, node))
+
+    let y = 28
+    const makeNodeId = () => `node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+
+    const headingNode = {
+      id: makeNodeId(),
+      type: 'heading',
+      pageId: currentPage.id,
+      parentId: null,
+      position: { x: 32, y },
+      size: { width: 760, height: 56 },
+      style: {
+        color: '#111827',
+        fontSize: '28px',
+        fontWeight: '700',
+        lineHeight: '1.25'
+      },
+      props: { text: payload.title || currentPage.name || 'Rendered Page', level: 1 },
+      children: [],
+      name: 'Heading',
+      locked: false,
+      visible: true
+    }
+    nextNodes.set(headingNode.id, headingNode as CanvasNode)
+    y += 80
+
+    payload.blocks.slice(0, 40).forEach((block) => {
+      const id = makeNodeId()
+      const isHeading = block.type === 'heading'
+      const type = isHeading ? 'heading' : block.type === 'button' ? 'button' : block.type === 'link' ? 'link' : 'text'
+
+      const node = {
+        id,
+        type,
+        pageId: currentPage.id,
+        parentId: null,
+        position: { x: 32, y },
+        size: { width: 760, height: isHeading ? 50 : type === 'button' ? 44 : 42 },
+        style: type === 'button'
+          ? {
+              backgroundColor: '#2563EB',
+              color: '#FFFFFF',
+              borderRadius: '8px',
+              border: 'none',
+              padding: '10px 14px',
+              width: '220px'
+            }
+          : type === 'link'
+            ? {
+                color: '#1D4ED8',
+                textDecoration: 'underline',
+                fontSize: '16px'
+              }
+            : {
+                color: '#111827',
+                fontSize: isHeading ? '24px' : '16px',
+                lineHeight: '1.45'
+              },
+        props:
+          type === 'heading'
+            ? { text: block.text, level: 2 }
+            : type === 'text'
+              ? { content: block.text }
+              : type === 'button'
+                ? { text: block.text }
+                : { text: block.text, href: '#' },
+        children: [],
+        name: type[0].toUpperCase() + type.slice(1),
+        locked: false,
+        visible: true
+      }
+
+      nextNodes.set(id, node as CanvasNode)
+      y += isHeading ? 64 : 56
+    })
+
+    setNodes(nextNodes)
+    deselectAll()
+    pushHistory()
+    setDirty(true)
+  }, [currentPage, nodes, setNodes, deselectAll, pushHistory, setDirty])
+
   return (
     <div className="relative h-full w-full overflow-hidden">
       {/* Page Header */}
@@ -105,10 +201,37 @@ export function Canvas() {
           <span className="text-sm font-medium">Page:</span>
           <span className="text-sm text-muted-foreground">{currentPage?.name || currentProject?.pages[0]?.name || 'Home'}</span>
         </div>
-        <div className="text-xs text-muted-foreground">
-          {currentPageNodes.length} element{currentPageNodes.length !== 1 ? 's' : ''}
+        <div className="flex items-center gap-3">
+          <div className="rounded-md border bg-muted/30 p-0.5">
+            <Button
+              size="sm"
+              variant={settings.canvasViewMode === 'live' ? 'ghost' : 'default'}
+              className="h-7"
+              onClick={() => setSettings({ canvasViewMode: 'design' })}
+            >
+              Design
+            </Button>
+            <Button
+              size="sm"
+              variant={settings.canvasViewMode === 'live' ? 'default' : 'ghost'}
+              className="h-7"
+              onClick={() => setSettings({ canvasViewMode: 'live' })}
+            >
+              Live
+            </Button>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {currentPageNodes.length} element{currentPageNodes.length !== 1 ? 's' : ''}
+          </div>
         </div>
       </div>
+
+      {settings.canvasViewMode === 'live' ? (
+        <div className="absolute inset-x-0 bottom-0 top-10">
+          <RenderedPreview currentProject={currentProject} currentPage={currentPage} onCaptureBlocks={applyRenderedCapture} />
+        </div>
+      ) : (
+        <>
       
       {/* Canvas Container */}
       <div
@@ -231,6 +354,8 @@ export function Canvas() {
           </div>
         </div>
       </div>
+      </>
+      )}
     </div>
   )
 }

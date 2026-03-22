@@ -99,6 +99,8 @@ export interface AppSettings {
   recentProjects: string[]
   shortcuts: Record<string, string>
   openRouterApiKey?: string
+  canvasViewMode?: 'design' | 'live'
+  livePreviewBaseUrl?: string
 }
 
 // AI types

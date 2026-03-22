@@ -6,6 +6,7 @@ console.log('Preload script executing...')
 const electronAPI = {
   // App
   getVersion: () => ipcRenderer.invoke('app:get-version'),
+  openExternal: (url) => ipcRenderer.invoke('app:open-external', url),
 
   // Dialog
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
@@ -33,7 +34,10 @@ const electronAPI = {
   // Source sync
   applySourceTextEdit: (payload) => ipcRenderer.invoke('source:apply-text-edit', payload),
   applySourcePageMetadataEdit: (payload) => ipcRenderer.invoke('source:apply-page-metadata-edit', payload),
-  syncSourcePage: (payload) => ipcRenderer.invoke('source:sync-page', payload)
+  syncSourcePage: (payload) => ipcRenderer.invoke('source:sync-page', payload),
+
+  // Preview
+  capturePreviewRoute: (payload) => ipcRenderer.invoke('preview:capture-route', payload)
 }
 
 // Expose API to window

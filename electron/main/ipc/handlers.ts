@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, shell } from 'electron'
 import { basename, dirname, join, relative } from 'path'
 import { promises as fs } from 'fs'
 import { homedir } from 'os'
@@ -113,6 +113,19 @@ interface ImportDebugReport {
   analysis?: ImportAnalysisResult
 }
 
+interface PreviewCapturePayload {
+  url: string
+}
+
+interface PreviewCaptureResult {
+  url: string
+  title: string
+  blocks: Array<{
+    type: 'heading' | 'text' | 'button' | 'link'
+    text: string
+  }>
+}
+
 const TAG_TO_COMPONENT: Record<string, string> = {
   h1: 'heading',
   h2: 'heading',
@@ -167,6 +180,60 @@ function collectFallbackTextChunks(sourceCode: string): string[] {
 
   const unique = Array.from(new Set(lines))
   return unique.slice(0, 8)
+}
+
+function htmlToText(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function extractRenderedPreviewBlocks(html: string): PreviewCaptureResult['blocks'] {
+  const blocks: PreviewCaptureResult['blocks'] = []
+
+  const headingRegex = /<h([1-3])\b[^>]*>([\s\S]*?)<\/h\1>/gi
+  let match: RegExpExecArray | null
+  while ((match = headingRegex.exec(html)) !== null) {
+    const text = htmlToText(match[2])
+    if (text.length >= 3) {
+      blocks.push({ type: 'heading', text })
+    }
+    if (blocks.length >= 40) return blocks
+  }
+
+  const paragraphRegex = /<p\b[^>]*>([\s\S]*?)<\/p>/gi
+  while ((match = paragraphRegex.exec(html)) !== null) {
+    const text = htmlToText(match[1])
+    if (text.length >= 16) {
+      blocks.push({ type: 'text', text })
+    }
+    if (blocks.length >= 80) return blocks
+  }
+
+  const buttonRegex = /<button\b[^>]*>([\s\S]*?)<\/button>/gi
+  while ((match = buttonRegex.exec(html)) !== null) {
+    const text = htmlToText(match[1])
+    if (text.length >= 2) {
+      blocks.push({ type: 'button', text })
+    }
+    if (blocks.length >= 100) return blocks
+  }
+
+  const linkRegex = /<a\b[^>]*>([\s\S]*?)<\/a>/gi
+  while ((match = linkRegex.exec(html)) !== null) {
+    const text = htmlToText(match[1])
+    if (text.length >= 3) {
+      blocks.push({ type: 'link', text })
+    }
+    if (blocks.length >= 120) return blocks
+  }
+
+  return blocks
 }
 
 function parseAttr(block: string, attr: string): string {
@@ -810,7 +877,7 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
   const mappings: SourceMappingItem[] = []
   const sourcePathRelative = relative(sourceRoot, sourcePath)
   let match: RegExpExecArray | null
-  let index = 0
+  let visualIndex = 0
   const perTagCount = new Map<string, number>()
 
   while ((match = elementRegex.exec(sourceCode)) !== null) {
@@ -823,15 +890,20 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     const componentType = TAG_TO_COMPONENT[tag] || (isBladeComponentTag ? 'card' : undefined)
     if (!componentType) continue
 
+    if (componentType === 'container') {
+      continue
+    }
+
     const rawText = extractTextContent(innerHtml)
     const text = sanitizeBladeText(rawText)
 
     if (componentType === 'text' && text.length < 3) continue
     if (componentType === 'heading' && text.length < 2) continue
+    if (componentType === 'card' && !isBladeComponentTag && text.length < 6) continue
 
     const nodeId = makeNodeId('node')
-    const y = 24 + Math.floor(index / 2) * 86
-    const x = 24 + (index % 2) * 400
+    const y = 24 + Math.floor(visualIndex / 2) * 86
+    const x = 24 + (visualIndex % 2) * 400
 
     const node: ImportedNode = {
       id: nodeId,
@@ -919,7 +991,7 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
       kind: 'element'
     })
 
-    index += 1
+    visualIndex += 1
     if (nodes.length >= 100) break
   }
 
@@ -1173,6 +1245,46 @@ export function setupIPC() {
   // Get app version
   ipcMain.handle('app:get-version', () => {
     return app.getVersion()
+  })
+
+  ipcMain.handle('app:open-external', async (_event, url: string) => {
+    await shell.openExternal(url)
+    return true
+  })
+
+  ipcMain.handle('preview:capture-route', async (_event, payload: PreviewCapturePayload): Promise<PreviewCaptureResult> => {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 12000)
+
+    try {
+      const response = await fetch(payload.url, {
+        method: 'GET',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'aiuiedit-render-capture/1.0'
+        }
+      })
+
+      if (!response.ok) {
+        throw new Error(`Preview request failed (${response.status})`)
+      }
+
+      const html = await response.text()
+      const titleMatch = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)
+      const title = titleMatch ? htmlToText(titleMatch[1]) : 'Rendered Page'
+      const blocks = extractRenderedPreviewBlocks(html)
+
+      return {
+        url: payload.url,
+        title,
+        blocks
+      }
+    } catch (error: any) {
+      const reason = error?.name === 'AbortError' ? 'Preview request timed out' : (error?.message || 'Preview capture failed')
+      throw new Error(reason)
+    } finally {
+      clearTimeout(timeout)
+    }
   })
 
   const importSourceProject = async (

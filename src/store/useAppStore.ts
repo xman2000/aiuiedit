@@ -19,7 +19,9 @@ export const useAppStore = create<AppState>()(
         theme: 'system',
         aiModel: 'kimi-latest',
         recentProjects: [],
-        shortcuts: {}
+        shortcuts: {},
+        canvasViewMode: 'design',
+        livePreviewBaseUrl: 'http://127.0.0.1:8000'
       },
       isWelcomeOpen: true,
       isLoading: false,

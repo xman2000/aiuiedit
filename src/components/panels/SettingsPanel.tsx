@@ -10,6 +10,7 @@ export function SettingsPanel() {
   const [isSaving, setIsSaving] = useState(false)
   const [aiModel, setAiModel] = useState(settings.aiModel || 'kimi-latest')
   const [workspacePath, setWorkspacePath] = useState(settings.workspacePath || '')
+  const [livePreviewBaseUrl, setLivePreviewBaseUrl] = useState(settings.livePreviewBaseUrl || 'http://127.0.0.1:8000')
 
   useEffect(() => {
     // Load API key from settings
@@ -18,7 +19,8 @@ export function SettingsPanel() {
     }
     setAiModel(settings.aiModel || 'kimi-latest')
     setWorkspacePath(settings.workspacePath || '')
-  }, [settings.openRouterApiKey, settings.aiModel, settings.workspacePath])
+    setLivePreviewBaseUrl(settings.livePreviewBaseUrl || 'http://127.0.0.1:8000')
+  }, [settings.openRouterApiKey, settings.aiModel, settings.workspacePath, settings.livePreviewBaseUrl])
 
   const handleSelectWorkspace = async () => {
     try {
@@ -39,7 +41,8 @@ export function SettingsPanel() {
         ...settings,
         openRouterApiKey: apiKey,
         aiModel,
-        workspacePath
+        workspacePath,
+        livePreviewBaseUrl
       }
       await window.electron.saveSettings(newSettings)
       setSettings(newSettings)
@@ -136,6 +139,20 @@ export function SettingsPanel() {
               <FolderOpen className="mr-2 h-4 w-4" />
               Choose Workspace Folder
             </Button>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Live Preview Base URL</label>
+            <p className="text-xs text-muted-foreground">
+              URL for rendered page preview mode (for example: http://127.0.0.1:8000 for Laravel).
+            </p>
+            <input
+              type="text"
+              value={livePreviewBaseUrl}
+              onChange={(e) => setLivePreviewBaseUrl(e.target.value)}
+              placeholder="http://127.0.0.1:8000"
+              className="w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
           </div>
         </div>
       </div>

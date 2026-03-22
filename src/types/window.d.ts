@@ -4,6 +4,7 @@ declare global {
   interface Window {
     electron: {
       getVersion: () => Promise<string>
+      openExternal: (url: string) => Promise<boolean>
       selectDirectory: () => Promise<string | null>
       selectEntryFile: (sourceRoot?: string) => Promise<string | null>
       saveFileDialog: (options: {
@@ -66,6 +67,13 @@ declare global {
           description?: string
         }
       }) => Promise<{ success: boolean; sourceFile: string; route: string }>
+      capturePreviewRoute: (payload: {
+        url: string
+      }) => Promise<{
+        url: string
+        title: string
+        blocks: Array<{ type: 'heading' | 'text' | 'button' | 'link'; text: string }>
+      }>
     }
     showToast: (message: string, type?: 'success' | 'error' | 'info') => void
   }
