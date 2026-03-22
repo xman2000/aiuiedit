@@ -11,6 +11,13 @@ import { RenderedPreview } from './RenderedPreview'
 import type { CanvasNode } from '@/types'
 
 export function Canvas() {
+  const PAGE_FRAME = {
+    left: 100,
+    top: 100,
+    width: 1200,
+    height: 800
+  }
+
   const canvasRef = useRef<HTMLDivElement>(null)
   const { 
     zoom, 
@@ -89,12 +96,12 @@ export function Canvas() {
     selectNode(targetId, e.metaKey || e.ctrlKey)
   }, [selectNode, nodes])
 
-  const handleAddNode = useCallback((type: string) => {
+  const addNodeAtPosition = useCallback((type: string, position?: { x: number; y: number }) => {
     if (!currentProject) return
 
     if (!currentPage) return
 
-    const newNode = createCanvasNode(type, currentPage.id)
+    const newNode = createCanvasNode(type, currentPage.id, position)
     if (!newNode) return
 
     addNode(newNode)
@@ -103,6 +110,40 @@ export function Canvas() {
     // Select the new node
     useCanvasStore.getState().selectNode(newNode.id)
   }, [currentProject, currentPage, addNode, setDirty])
+
+  const handleAddNode = useCallback((type: string) => {
+    addNodeAtPosition(type)
+  }, [addNodeAtPosition])
+
+  const handleCanvasDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (settings.canvasViewMode !== 'design') return
+    if (!e.dataTransfer.types.includes('component-type')) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [settings.canvasViewMode])
+
+  const handleCanvasDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (settings.canvasViewMode !== 'design') return
+    const componentType = e.dataTransfer.getData('component-type')
+    if (!componentType) return
+
+    e.preventDefault()
+
+    const canvas = canvasRef.current
+    if (!canvas) {
+      addNodeAtPosition(componentType)
+      return
+    }
+
+    const rect = canvas.getBoundingClientRect()
+    const canvasX = (e.clientX - rect.left - viewport.x) / zoom
+    const canvasY = (e.clientY - rect.top - viewport.y) / zoom
+
+    const x = Math.max(0, Math.min(PAGE_FRAME.width - 40, Math.round(canvasX - PAGE_FRAME.left)))
+    const y = Math.max(0, Math.min(PAGE_FRAME.height - 30, Math.round(canvasY - PAGE_FRAME.top)))
+
+    addNodeAtPosition(componentType, { x, y })
+  }, [settings.canvasViewMode, addNodeAtPosition, viewport.x, viewport.y, zoom])
 
   const applyRenderedCapture = useCallback((payload: {
     title: string
@@ -324,6 +365,8 @@ export function Canvas() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onDragOver={handleCanvasDragOver}
+        onDrop={handleCanvasDrop}
         style={{
           cursor: isPanning ? 'grabbing' : 'default'
         }}
@@ -352,15 +395,15 @@ export function Canvas() {
           <div 
             className="absolute border-2 border-dashed border-muted-foreground/30 bg-background shadow-lg"
             style={{
-              left: '100px',
-              top: '100px',
-              width: '1200px',
-              height: '800px',
+              left: `${PAGE_FRAME.left}px`,
+              top: `${PAGE_FRAME.top}px`,
+              width: `${PAGE_FRAME.width}px`,
+              height: `${PAGE_FRAME.height}px`,
             }}
           >
             {/* Page Label */}
             <div className="absolute -top-6 left-0 text-xs text-muted-foreground font-medium">
-              Page: {currentPage?.name || currentProject?.pages[0]?.name || 'Home'} (1200×800)
+              Page: {currentPage?.name || currentProject?.pages[0]?.name || 'Home'} ({PAGE_FRAME.width}×{PAGE_FRAME.height})
             </div>
             
             {/* Render Nodes - Inside Page Frame */}
