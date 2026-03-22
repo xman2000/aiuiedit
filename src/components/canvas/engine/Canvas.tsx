@@ -111,6 +111,17 @@ export function Canvas() {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
+      {/* Page Header */}
+      <div className="absolute top-0 left-0 right-0 h-10 bg-card border-b flex items-center justify-between px-4 z-10">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">Page:</span>
+          <span className="text-sm text-muted-foreground">{currentProject?.pages[0]?.name || 'Home'}</span>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          {nodes.size} element{nodes.size !== 1 ? 's' : ''}
+        </div>
+      </div>
+      
       {/* Canvas Container */}
       <div
         ref={canvasRef}

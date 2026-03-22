@@ -20,13 +20,13 @@ interface AIAction {
 }
 
 export function ChatPanel() {
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'assistant',
-      content: 'Hello! I\'m your AI design assistant. Select elements on the canvas and tell me what to do with them. Try: "make this green" or "add a button"',
+      content: 'Hello! I\'m your local AI assistant. I\'m running entirely on your machine - no OpenRouter connection needed. I can understand commands like "add a button", "make this green", or "move this up 10px". Select elements and tell me what to do!',
       timestamp: new Date()
     }
   ])

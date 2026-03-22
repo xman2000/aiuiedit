@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { Toolbar } from '@/components/panels/Toolbar'
 import { ComponentLibrary } from '@/components/library/ComponentLibrary'
@@ -8,6 +8,7 @@ import { PropertiesPanel } from '@/components/panels/PropertiesPanel'
 import { ChatPanel } from '@/components/panels/ChatPanel'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useCanvasStore } from '@/store/useCanvasStore'
+import { useAppStore } from '@/store/useAppStore'
 import { useKeyboardShortcuts } from '@/utils/shortcuts'
 import { Button } from '@/components/common/Button'
 import { Plus } from 'lucide-react'
@@ -117,18 +118,32 @@ export function MainLayout() {
 
 function EmptyState() {
   const { setCurrentProject } = useProjectStore()
+  const { settings } = useAppStore()
   const [isCreating, setIsCreating] = useState(false)
+  const [workspace, setWorkspace] = useState<string>('')
+
+  useEffect(() => {
+    // Load workspace path
+    window.electron?.loadSettings().then(s => {
+      setWorkspace(s?.workspacePath || '')
+    }).catch(() => setWorkspace(''))
+  }, [])
 
   const handleCreateProject = async () => {
+    if (!workspace) {
+      window.showToast('Please set a workspace directory first in Settings', 'error')
+      return
+    }
+    
     setIsCreating(true)
     try {
       const name = `Project-${Date.now()}`
       const project = await window.electron.createProject(name)
-      setCurrentProject(project, `${await window.electron.loadSettings().then(s => s.workspacePath)}/projects/${name}.canvas`)
+      setCurrentProject(project, `${workspace}/projects/${name}.canvas`)
       window.showToast('Project created!', 'success')
     } catch (error) {
       console.error('Failed to create project:', error)
-      window.showToast('Failed to create project', 'error')
+      window.showToast('Failed to create project: ' + error, 'error')
     } finally {
       setIsCreating(false)
     }
@@ -136,19 +151,34 @@ function EmptyState() {
 
   return (
     <div className="flex h-full flex-col items-center justify-center p-8">
-      <div className="text-center">
+      <div className="text-center max-w-md">
         <div className="mb-6 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-primary/10">
           <Plus className="h-10 w-10 text-primary" />
         </div>
         
         <h2 className="mb-2 text-2xl font-bold">No Project Open</h2>
-        <p className="mb-6 text-muted-foreground">
-          Create a new project or open an existing one to start designing
-        </p>
+        
+        {!workspace ? (
+          <>
+            <p className="mb-4 text-muted-foreground">
+              You need to set up a workspace directory first. This is where all your projects will be stored.
+            </p>
+            <div className="rounded-lg border border-yellow-500/50 bg-yellow-500/10 p-4 mb-4">
+              <p className="text-sm text-yellow-700 dark:text-yellow-400">
+                <strong>No workspace configured.</strong><br/>
+                Please restart the app and complete the welcome wizard, or set a workspace in Settings.
+              </p>
+            </div>
+          </>
+        ) : (
+          <p className="mb-6 text-muted-foreground">
+            Create a new project in <code className="text-xs bg-muted px-1 py-0.5 rounded">{workspace}</code>
+          </p>
+        )}
 
         <Button 
           onClick={handleCreateProject}
-          disabled={isCreating}
+          disabled={isCreating || !workspace}
           size="lg"
         >
           <Plus className="mr-2 h-5 w-5" />
