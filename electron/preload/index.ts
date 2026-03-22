@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+console.log('Preload script executing...')
+
 // API exposed to renderer process
 const electronAPI = {
   // App
@@ -21,3 +23,5 @@ const electronAPI = {
 
 // Expose API to window
 contextBridge.exposeInMainWorld('electron', electronAPI)
+
+console.log('Preload script completed - electron API exposed')

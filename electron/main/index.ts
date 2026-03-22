@@ -17,6 +17,14 @@ export function getMainWindow(): BrowserWindow | null {
 }
 
 function createWindow() {
+  // Determine preload path based on environment
+  const preloadPath = process.env.VITE_DEV_SERVER_URL
+    ? join(__dirname, '../preload/index.js')  // Dev mode
+    : join(__dirname, '../preload/index.js')  // Production
+
+  console.log('Loading preload script from:', preloadPath)
+  console.log('__dirname:', __dirname)
+
   mainWindow = new BrowserWindow({
     width: 1600,
     height: 1000,
@@ -24,7 +32,7 @@ function createWindow() {
     minHeight: 800,
     titleBarStyle: 'hiddenInset',
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false
@@ -59,8 +67,10 @@ function createWindow() {
 
 // App lifecycle
 app.whenReady().then(() => {
-  createWindow()
+  console.log('App ready, setting up IPC...')
   setupIPC()
+  console.log('IPC setup complete, creating window...')
+  createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

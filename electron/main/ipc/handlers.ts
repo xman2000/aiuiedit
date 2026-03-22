@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, BrowserWindow } from 'electron'
+import { ipcMain, dialog, app } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { homedir } from 'os'

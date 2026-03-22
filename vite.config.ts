@@ -36,6 +36,11 @@ export default defineConfig({
             sourcemap: true,
             minify: process.env.NODE_ENV === 'production',
             outDir: 'dist-electron/preload',
+            lib: {
+              entry: 'electron/preload/index.ts',
+              formats: ['cjs'],
+              fileName: () => 'index.js'
+            },
             rollupOptions: {
               external: ['electron']
             }
