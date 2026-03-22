@@ -110,7 +110,7 @@ export function PropertiesPanel() {
                   type="number" 
                   value={Math.round(node.position.x)}
                   onChange={(e) => handlePositionChange('x', parseInt(e.target.value) || 0)}
-                  className="w-full bg-transparent text-sm outline-none"
+                  className="w-full bg-background text-foreground text-sm outline-none"
                 />
               </div>
               <div className="rounded border p-2">
@@ -119,7 +119,7 @@ export function PropertiesPanel() {
                   type="number"
                   value={Math.round(node.position.y)}
                   onChange={(e) => handlePositionChange('y', parseInt(e.target.value) || 0)}
-                  className="w-full bg-transparent text-sm outline-none"
+                  className="w-full bg-background text-foreground text-sm outline-none"
                 />
               </div>
               <div className="rounded border p-2">
@@ -128,7 +128,7 @@ export function PropertiesPanel() {
                   type="text"
                   value={typeof node.size.width === 'number' ? node.size.width : node.size.width}
                   onChange={(e) => handleSizeChange('width', e.target.value)}
-                  className="w-full bg-transparent text-sm outline-none"
+                  className="w-full bg-background text-foreground text-sm outline-none"
                 />
               </div>
               <div className="rounded border p-2">
@@ -137,7 +137,7 @@ export function PropertiesPanel() {
                   type="text"
                   value={typeof node.size.height === 'number' ? node.size.height : node.size.height}
                   onChange={(e) => handleSizeChange('height', e.target.value)}
-                  className="w-full bg-transparent text-sm outline-none"
+                  className="w-full bg-background text-foreground text-sm outline-none"
                 />
               </div>
             </div>
@@ -192,7 +192,7 @@ export function PropertiesPanel() {
                     type="text"
                     value={node.style.backgroundColor as string || ''}
                     onChange={(e) => handleStyleChange('backgroundColor', e.target.value)}
-                    className="flex-1 rounded border px-2 py-1 text-sm"
+                    className="flex-1 rounded border bg-background text-foreground px-2 py-1 text-sm"
                   />
                 </div>
               </div>
@@ -210,7 +210,7 @@ export function PropertiesPanel() {
                     type="text"
                     value={node.style.color as string || ''}
                     onChange={(e) => handleStyleChange('color', e.target.value)}
-                    className="flex-1 rounded border px-2 py-1 text-sm"
+                    className="flex-1 rounded border bg-background text-foreground px-2 py-1 text-sm"
                   />
                 </div>
               </div>
@@ -221,7 +221,7 @@ export function PropertiesPanel() {
                   type="text"
                   value={node.style.borderRadius as string || '0'}
                   onChange={(e) => handleStyleChange('borderRadius', e.target.value)}
-                  className="w-full rounded border px-2 py-1 text-sm"
+                  className="w-full rounded border bg-background text-foreground px-2 py-1 text-sm"
                 />
               </div>
 
@@ -231,7 +231,7 @@ export function PropertiesPanel() {
                   type="text"
                   value={node.style.padding as string || '0'}
                   onChange={(e) => handleStyleChange('padding', e.target.value)}
-                  className="w-full rounded border px-2 py-1 text-sm"
+                  className="w-full rounded border bg-background text-foreground px-2 py-1 text-sm"
                 />
               </div>
             </div>
@@ -254,7 +254,7 @@ export function PropertiesPanel() {
                       type="text"
                       value={node.props[prop.name] || ''}
                       onChange={(e) => handlePropChange(prop.name, e.target.value)}
-                      className="w-full rounded border px-2 py-1 text-sm"
+                      className="w-full rounded border bg-background text-foreground px-2 py-1 text-sm"
                     />
                   )}
                   
@@ -263,7 +263,7 @@ export function PropertiesPanel() {
                       type="number"
                       value={node.props[prop.name] || 0}
                       onChange={(e) => handlePropChange(prop.name, parseInt(e.target.value) || 0)}
-                      className="w-full rounded border px-2 py-1 text-sm"
+                      className="w-full rounded border bg-background text-foreground px-2 py-1 text-sm"
                     />
                   )}
                   
@@ -271,7 +271,7 @@ export function PropertiesPanel() {
                     <select
                       value={node.props[prop.name] || prop.default}
                       onChange={(e) => handlePropChange(prop.name, e.target.value)}
-                      className="w-full rounded border px-2 py-1 text-sm bg-background"
+                      className="w-full rounded border px-2 py-1 text-sm bg-background text-foreground"
                     >
                       {prop.options.map(option => (
                         <option key={option} value={option}>{option}</option>

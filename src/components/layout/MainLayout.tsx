@@ -87,7 +87,7 @@ export function MainLayout() {
                   </button>
                 </div>
                 
-                <div className="flex-1 overflow-auto">
+                <div className="flex-1 min-h-0 overflow-hidden">
                   {activeLeftPanel === 'library' && <ComponentLibrary onAddComponent={handleAddComponent} />}
                   {activeLeftPanel === 'pages' && <PagesPanel />}
                   {activeLeftPanel === 'design' && <DesignSystemPanel />}

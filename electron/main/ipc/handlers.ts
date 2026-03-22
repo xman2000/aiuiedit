@@ -646,12 +646,51 @@ function titleFromRoute(route: string): string {
     .join(' ') || 'Page'
 }
 
+function parseLaravelControllerUses(routesContent: string): Record<string, string> {
+  const map: Record<string, string> = {}
+  const useRegex = /^\s*use\s+([A-Za-z0-9_\\]+)(?:\s+as\s+([A-Za-z0-9_]+))?\s*;/gm
+  let match: RegExpExecArray | null
+
+  while ((match = useRegex.exec(routesContent)) !== null) {
+    const full = match[1]
+    const alias = match[2] || full.split('\\').pop() || full
+    map[alias] = full
+  }
+
+  return map
+}
+
+function fqcnToControllerPath(sourceRoot: string, fqcn: string): string | null {
+  if (!fqcn.startsWith('App\\')) return null
+  const relativeClassPath = fqcn.replace(/^App\\/, '').replace(/\\/g, '/')
+  return join(sourceRoot, 'app', `${relativeClassPath}.php`)
+}
+
+async function findViewFromControllerMethod(sourceRoot: string, controllerFqcn: string, methodName: string): Promise<string | null> {
+  const controllerPath = fqcnToControllerPath(sourceRoot, controllerFqcn)
+  if (!controllerPath || !(await pathExists(controllerPath))) return null
+
+  const controllerContent = await fs.readFile(controllerPath, 'utf-8')
+  const methodRegex = new RegExp(`function\\s+${methodName}\\s*\\([^)]*\\)\\s*\\{([\\s\\S]*?)\\n\\}`, 'm')
+  const methodMatch = controllerContent.match(methodRegex)
+  if (!methodMatch?.[1]) return null
+
+  const body = methodMatch[1]
+  const viewMatch = body.match(/return\s+view\(\s*['"]([A-Za-z0-9_.\-]+)['"]/)
+  if (!viewMatch?.[1]) return null
+
+  const viewPath = viewNameToBladePath(sourceRoot, viewMatch[1])
+  if (!(await pathExists(viewPath))) return null
+  return viewPath
+}
+
 async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): Promise<DiscoveredPage[]> {
   const pages = new Map<string, DiscoveredPage>()
   const routesFile = join(sourceRoot, 'routes', 'web.php')
 
   if (await pathExists(routesFile)) {
     const routesContent = await fs.readFile(routesFile, 'utf-8')
+    const controllerUses = parseLaravelControllerUses(routesContent)
 
     const routeViewRegex = /Route::view\(\s*['"]([^'"]+)['"]\s*,\s*['"]([a-zA-Z0-9_\-.:]+)['"]\s*\)/g
     let routeViewMatch: RegExpExecArray | null
@@ -682,6 +721,27 @@ async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): 
         framework: 'laravel'
       })
     }
+
+    const controllerRouteRegex = /Route::get\(\s*['"]([^'"]+)['"]\s*,\s*\[\s*([A-Za-z0-9_\\]+)::class\s*,\s*['"]([A-Za-z0-9_]+)['"]\s*\]\s*\)/g
+    let controllerRouteMatch: RegExpExecArray | null
+    while ((controllerRouteMatch = controllerRouteRegex.exec(routesContent)) !== null) {
+      const route = normalizeRoute(controllerRouteMatch[1])
+      const alias = controllerRouteMatch[2]
+      const method = controllerRouteMatch[3]
+
+      const controllerFqcn = alias.includes('\\') ? alias : controllerUses[alias]
+      if (!controllerFqcn) continue
+
+      const viewPath = await findViewFromControllerMethod(sourceRoot, controllerFqcn, method)
+      if (!viewPath) continue
+
+      pages.set(route, {
+        route,
+        name: titleFromRoute(route),
+        file: viewPath,
+        framework: 'laravel'
+      })
+    }
   }
 
   if (pages.size === 0) {
@@ -701,22 +761,6 @@ async function discoverLaravelPages(sourceRoot: string, fallbackEntry: string): 
       route: '/',
       name: 'Home',
       file: fallbackEntry,
-      framework: 'laravel'
-    })
-  }
-
-  const allBladeFiles = await findFilesInTree(sourceRoot, ['.blade.php'], 7, 500)
-  for (const bladeFile of allBladeFiles) {
-    const rel = relative(sourceRoot, bladeFile).replace(/\\/g, '/')
-    if (rel.includes('/partials/') || rel.includes('/components/')) continue
-
-    const existing = Array.from(pages.values()).some((page) => page.file === bladeFile)
-    if (existing) continue
-
-    pages.set(`file:${rel}`, {
-      route: `file:${rel}`,
-      name: rel.split('/').slice(-1)[0].replace('.blade.php', ''),
-      file: bladeFile,
       framework: 'laravel'
     })
   }
