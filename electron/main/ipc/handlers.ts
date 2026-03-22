@@ -740,7 +740,7 @@ async function discoverSourcePages(sourceRoot: string, framework: SupportedFrame
 }
 
 function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: string, pageId: string): { nodes: ImportedNode[]; mappings: SourceMappingItem[] } {
-  const elementRegex = /<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>([\s\S]*?)<\/\1>|<([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)\/>/g
+  const elementRegex = /<([a-zA-Z][a-zA-Z0-9:-]*)\b([^>]*)>([\s\S]*?)<\/\1>|<([a-zA-Z][a-zA-Z0-9:-]*)\b([^>]*)\/>/g
   const nodes: ImportedNode[] = []
   const mappings: SourceMappingItem[] = []
   let match: RegExpExecArray | null
@@ -751,19 +751,22 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     const tag = (match[1] || match[4] || '').toLowerCase()
     const attrsBlock = match[2] || match[5] || ''
     const innerHtml = match[3] || ''
-    const componentType = TAG_TO_COMPONENT[tag]
+    if (tag === 'script' || tag === 'style') continue
+
+    const componentType = TAG_TO_COMPONENT[tag] || (tag.startsWith('x-') ? 'container' : undefined)
     if (!componentType) continue
 
     const nodeId = makeNodeId('node')
     const text = extractTextContent(innerHtml)
-    const y = 40 + index * 84
+    const y = 24 + Math.floor(index / 2) * 86
+    const x = 24 + (index % 2) * 400
 
     const node: ImportedNode = {
       id: nodeId,
       type: componentType,
       pageId,
       parentId: null,
-      position: { x: 48, y },
+      position: { x, y },
       size: {
         width: componentType === 'container' ? 420 : componentType === 'heading' ? 420 : 320,
         height: componentType === 'textarea' ? 120 : componentType === 'heading' ? 56 : 44
@@ -773,7 +776,7 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
       },
       props: {},
       children: [],
-      name: componentType[0].toUpperCase() + componentType.slice(1),
+      name: tag.startsWith('x-') ? tag : componentType[0].toUpperCase() + componentType.slice(1),
       locked: false,
       visible: true
     }
@@ -823,6 +826,34 @@ function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: 
     index += 1
 
     if (nodes.length >= 100) break
+  }
+
+  if (nodes.length === 0) {
+    const fallbackNodeId = makeNodeId('node')
+    const sourceLabel = relative(sourceRoot, sourcePath)
+    nodes.push({
+      id: fallbackNodeId,
+      type: 'heading',
+      pageId,
+      parentId: null,
+      position: { x: 32, y: 36 },
+      size: { width: 520, height: 58 },
+      style: {
+        boxSizing: 'border-box',
+        fontSize: '22px',
+        fontWeight: '700',
+        color: '#1F2937'
+      },
+      props: {
+        text: `Imported: ${sourceLabel}`,
+        level: 2
+      },
+      children: [],
+      name: 'Imported Page',
+      locked: false,
+      visible: true
+    })
+
   }
 
   return { nodes, mappings }
