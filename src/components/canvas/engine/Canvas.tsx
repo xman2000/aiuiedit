@@ -1,149 +1,22 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
-import { useCanvasStore } from '@/store/useCanvasStore'
-import { CanvasNodeComponent } from '../components/CanvasNode'
-import { MousePointer2, Plus } from 'lucide-react'
+import { useCallback } from 'react'
 import { Button } from '@/components/common/Button'
-import { BUILT_IN_COMPONENTS } from '@/core/ComponentRegistry'
-import { createCanvasNode } from '@/core/canvasNodeFactory'
+import { useCanvasStore } from '@/store/useCanvasStore'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useAppStore } from '@/store/useAppStore'
 import { RenderedPreview } from './RenderedPreview'
+import { LayoutView } from './LayoutView'
 import type { CanvasNode } from '@/types'
 
 export function Canvas() {
-  const PAGE_FRAME = {
-    left: 100,
-    top: 100,
-    width: 1200,
-    height: 800
-  }
-
-  const canvasRef = useRef<HTMLDivElement>(null)
-  const { 
-    zoom, 
-    viewport, 
-    nodes, 
-    selectedIds,
-    setZoom, 
-    setViewport, 
-    selectNode,
-    addNode,
-    setNodes,
-    deselectAll,
-    pushHistory
-  } = useCanvasStore()
+  const { nodes, setNodes, deselectAll, pushHistory } = useCanvasStore()
   const { currentProject, currentPage, setDirty } = useProjectStore()
   const { settings, setSettings } = useAppStore()
+
+  const viewMode = settings.canvasViewMode === 'live' ? 'live' : 'layout'
 
   const currentPageNodes = currentPage
     ? Array.from(nodes.values()).filter((node) => node.visible && (node.pageId || currentPage.id) === currentPage.id)
     : []
-  
-  const [isPanning, setIsPanning] = useState(false)
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 })
-
-  // Handle zoom with mouse wheel
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault()
-        const delta = e.deltaY > 0 ? -0.1 : 0.1
-        const newZoom = Math.max(0.1, Math.min(5, zoom + delta))
-        setZoom(newZoom)
-      }
-    }
-
-    canvas.addEventListener('wheel', handleWheel, { passive: false })
-    return () => canvas.removeEventListener('wheel', handleWheel)
-  }, [zoom, setZoom])
-
-  // Handle panning
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Middle mouse button or Space + left click for pan
-    if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
-      setIsPanning(true)
-      setPanStart({ x: e.clientX - viewport.x, y: e.clientY - viewport.y })
-      e.preventDefault()
-    } else if (e.button === 0 && !e.shiftKey) {
-      // Click on empty canvas to deselect
-      if (e.target === e.currentTarget) {
-        useCanvasStore.getState().deselectAll()
-      }
-    }
-  }, [viewport])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isPanning) {
-      setViewport({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y
-      })
-    }
-  }, [isPanning, panStart, setViewport])
-
-  const handleMouseUp = useCallback(() => {
-    setIsPanning(false)
-  }, [])
-
-  const handleNodeSelect = useCallback((nodeId: string) => (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const clicked = nodes.get(nodeId)
-    const parentNode = clicked?.parentId ? nodes.get(clicked.parentId) : null
-    const targetId = parentNode?.type === 'group' ? parentNode.id : nodeId
-    selectNode(targetId, e.metaKey || e.ctrlKey)
-  }, [selectNode, nodes])
-
-  const addNodeAtPosition = useCallback((type: string, position?: { x: number; y: number }) => {
-    if (!currentProject) return
-
-    if (!currentPage) return
-
-    const newNode = createCanvasNode(type, currentPage.id, position)
-    if (!newNode) return
-
-    addNode(newNode)
-    setDirty(true)
-    
-    // Select the new node
-    useCanvasStore.getState().selectNode(newNode.id)
-  }, [currentProject, currentPage, addNode, setDirty])
-
-  const handleAddNode = useCallback((type: string) => {
-    addNodeAtPosition(type)
-  }, [addNodeAtPosition])
-
-  const handleCanvasDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (settings.canvasViewMode !== 'design') return
-    if (!e.dataTransfer.types.includes('component-type')) return
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'copy'
-  }, [settings.canvasViewMode])
-
-  const handleCanvasDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (settings.canvasViewMode !== 'design') return
-    const componentType = e.dataTransfer.getData('component-type')
-    if (!componentType) return
-
-    e.preventDefault()
-
-    const canvas = canvasRef.current
-    if (!canvas) {
-      addNodeAtPosition(componentType)
-      return
-    }
-
-    const rect = canvas.getBoundingClientRect()
-    const canvasX = (e.clientX - rect.left - viewport.x) / zoom
-    const canvasY = (e.clientY - rect.top - viewport.y) / zoom
-
-    const x = Math.max(0, Math.min(PAGE_FRAME.width - 40, Math.round(canvasX - PAGE_FRAME.left)))
-    const y = Math.max(0, Math.min(PAGE_FRAME.height - 30, Math.round(canvasY - PAGE_FRAME.top)))
-
-    addNodeAtPosition(componentType, { x, y })
-  }, [settings.canvasViewMode, addNodeAtPosition, viewport.x, viewport.y, zoom])
 
   const applyRenderedCapture = useCallback((payload: {
     title: string
@@ -240,10 +113,10 @@ export function Canvas() {
         type === 'image'
           ? 180
           : isHeading
-              ? 58
-              : type === 'button'
-                ? 48
-                : 56
+            ? 58
+            : type === 'button'
+              ? 48
+              : 56
 
       const placement = placeNode(preferredHeight)
       if (!placement.canPlace) return
@@ -260,10 +133,10 @@ export function Canvas() {
             type === 'image'
               ? 180
               : isHeading
-                  ? 58
-                  : type === 'button'
-                    ? 48
-                    : 56
+                ? 58
+                : type === 'button'
+                  ? 48
+                  : 56
         },
         style: type === 'button'
           ? {
@@ -275,8 +148,8 @@ export function Canvas() {
               width: `${Math.min(placement.width, 260)}px`,
               fontWeight: '600'
             }
-            : type === 'link'
-              ? {
+          : type === 'link'
+            ? {
                 color: '#1D4ED8',
                 textDecoration: 'underline',
                 fontSize: '16px'
@@ -287,11 +160,11 @@ export function Canvas() {
                   border: '1px solid #D1D5DB',
                   objectFit: 'cover'
                 }
-            : {
-                color: resolvedTextColor,
-                fontSize: isHeading ? '24px' : '16px',
-                lineHeight: '1.45'
-              },
+              : {
+                  color: resolvedTextColor,
+                  fontSize: isHeading ? '24px' : '16px',
+                  lineHeight: '1.45'
+                },
         props:
           type === 'heading'
             ? { text: block.text, level: 2 }
@@ -319,8 +192,7 @@ export function Canvas() {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      {/* Page Header */}
-      <div className="absolute top-0 left-0 right-0 h-10 bg-card border-b flex items-center justify-between px-4 z-10">
+      <div className="absolute inset-x-0 top-0 z-10 flex h-10 items-center justify-between border-b bg-card px-4">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Page:</span>
           <span className="text-sm text-muted-foreground">{currentPage?.name || currentProject?.pages[0]?.name || 'Home'}</span>
@@ -329,15 +201,15 @@ export function Canvas() {
           <div className="rounded-md border bg-muted/30 p-0.5">
             <Button
               size="sm"
-              variant={settings.canvasViewMode === 'live' ? 'ghost' : 'default'}
+              variant={viewMode === 'live' ? 'ghost' : 'default'}
               className="h-7"
-              onClick={() => setSettings({ canvasViewMode: 'design' })}
+              onClick={() => setSettings({ canvasViewMode: 'layout' })}
             >
-              Design
+              Layout
             </Button>
             <Button
               size="sm"
-              variant={settings.canvasViewMode === 'live' ? 'default' : 'ghost'}
+              variant={viewMode === 'live' ? 'default' : 'ghost'}
               className="h-7"
               onClick={() => setSettings({ canvasViewMode: 'live' })}
             >
@@ -350,176 +222,10 @@ export function Canvas() {
         </div>
       </div>
 
-      {settings.canvasViewMode === 'live' ? (
-        <div className="absolute inset-x-0 bottom-0 top-10">
-          <RenderedPreview currentProject={currentProject} currentPage={currentPage} onCaptureBlocks={applyRenderedCapture} />
-        </div>
-      ) : (
-        <>
-      
-      {/* Canvas Container */}
-      <div
-        ref={canvasRef}
-        className="absolute inset-0 canvas-container cursor-grab active:cursor-grabbing"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onDragOver={handleCanvasDragOver}
-        onDrop={handleCanvasDrop}
-        style={{
-          cursor: isPanning ? 'grabbing' : 'default'
-        }}
-      >
-        <div
-          className="absolute origin-top-left transition-transform duration-75"
-          style={{
-            transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${zoom})`,
-            width: '3000px',
-            height: '3000px'
-          }}
-        >
-          {/* Grid Background */}
-          <div 
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `
-                linear-gradient(to right, rgba(0,0,0,0.05) 1px, transparent 1px),
-                linear-gradient(to bottom, rgba(0,0,0,0.05) 1px, transparent 1px)
-              `,
-              backgroundSize: '20px 20px'
-            }}
-          />
-
-          {/* Page Frame - Visual Boundary */}
-          <div 
-            className="absolute border-2 border-dashed border-muted-foreground/30 bg-background shadow-lg"
-            style={{
-              left: `${PAGE_FRAME.left}px`,
-              top: `${PAGE_FRAME.top}px`,
-              width: `${PAGE_FRAME.width}px`,
-              height: `${PAGE_FRAME.height}px`,
-            }}
-          >
-            {/* Page Label */}
-            <div className="absolute -top-6 left-0 text-xs text-muted-foreground font-medium">
-              Page: {currentPage?.name || currentProject?.pages[0]?.name || 'Home'} ({PAGE_FRAME.width}×{PAGE_FRAME.height})
-            </div>
-            
-            {/* Render Nodes - Inside Page Frame */}
-            <div className="relative w-full h-full overflow-hidden">
-              {currentPageNodes.map(node => (
-                <CanvasNodeComponent
-                  key={node.id}
-                  node={node}
-                  isSelected={selectedIds.has(node.id)}
-                  onSelect={handleNodeSelect(node.id)}
-                  scale={zoom}
-                />
-              ))}
-
-              {/* Empty State - Inside Page Frame */}
-              {currentPageNodes.length === 0 && (
-                <EmptyCanvas onAddNode={handleAddNode} />
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Floating Toolbar */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-lg border bg-card p-2 shadow-lg">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setZoom(Math.max(0.1, zoom - 0.1))}
-        >
-          <span className="text-xs">−</span>
-        </Button>
-        
-        <span className="min-w-[4rem] text-center text-xs font-medium">
-          {Math.round(zoom * 100)}%
-        </span>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setZoom(Math.min(5, zoom + 0.1))}
-        >
-          <span className="text-xs">+</span>
-        </Button>
-
-        <div className="mx-2 h-4 w-px bg-border" />
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setViewport({ x: 0, y: 0 })}
-        >
-          Reset View
-        </Button>
-      </div>
-
-      {/* Quick Add Panel */}
-      <div className="absolute top-4 right-4 flex flex-col gap-2">
-        <div className="rounded-lg border bg-card p-2 shadow-lg">
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Quick Add</p>
-          <div className="flex flex-col gap-1">
-            {BUILT_IN_COMPONENTS.slice(0, 4).map(component => (
-              <Button
-                key={component.type}
-                variant="ghost"
-                size="sm"
-                className="justify-start"
-                onClick={() => handleAddNode(component.type)}
-              >
-                <Plus className="mr-2 h-3 w-3" />
-                {component.name}
-              </Button>
-            ))}
-          </div>
-        </div>
-      </div>
-      </>
-      )}
-    </div>
-  )
-}
-
-interface EmptyCanvasProps {
-  onAddNode: (type: string) => void
-}
-
-function EmptyCanvas({ onAddNode }: EmptyCanvasProps) {
-  return (
-    <div className="flex h-full items-center justify-center">
-      <div className="text-center">
-        <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-          <MousePointer2 className="h-8 w-8 text-muted-foreground" />
-        </div>
-        
-        <p className="text-muted-foreground">
-          Drag components from the library or click Quick Add
-        </p>
-        
-        <p className="mt-2 text-sm text-muted-foreground">
-          or type in the AI chat: "Add a button"
-        </p>
-
-        <div className="mt-4 flex justify-center gap-2">
-          <Button onClick={() => onAddNode('button')} size="sm">
-            <Plus className="mr-1 h-3 w-3" />
-            Button
-          </Button>
-          <Button onClick={() => onAddNode('text')} size="sm" variant="outline">
-            <Plus className="mr-1 h-3 w-3" />
-            Text
-          </Button>
-          <Button onClick={() => onAddNode('container')} size="sm" variant="outline">
-            <Plus className="mr-1 h-3 w-3" />
-            Container
-          </Button>
-        </div>
+      <div className="absolute inset-x-0 bottom-0 top-10">
+        {viewMode === 'live'
+          ? <RenderedPreview currentProject={currentProject} currentPage={currentPage} onCaptureBlocks={applyRenderedCapture} />
+          : <LayoutView currentPage={currentPage || undefined} />}
       </div>
     </div>
   )

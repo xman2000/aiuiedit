@@ -926,7 +926,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             }}
           />
         ) : snapshotDocument ? (
-          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_460px]">
+          <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_360px_320px]">
             <iframe
               ref={snapshotIframeRef}
               key={`snapshot-${previewUrl}-${refreshToken}`}
@@ -1063,50 +1063,6 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                         />
                       </div>
                     </div>
-
-                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
-                      {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                        <div key={group.key}>
-                          <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                          <div className="flex flex-wrap gap-1">
-                            {group.options.map((option) => {
-                              const isActive = snapshotClassTokens.includes(option.value)
-                              return (
-                                <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                  {option.label}
-                                </button>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
-                      {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
-                        <div key={group.key}>
-                          <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                          {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
-                            <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
-                              <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
-                              <div className="flex flex-wrap gap-1">
-                                {group.options.map((option) => {
-                                  const classToken = `${variant.prefix}${option.value}`
-                                  const isActive = snapshotClassTokens.includes(classToken)
-                                  return (
-                                    <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
-                                      {option.label}
-                                    </button>
-                                  )
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))}
-                    </div>
                   </div>
 
                   <div className="mt-2 space-y-2 border-t pt-2">
@@ -1119,6 +1075,58 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">Click any text element, image, or container/card in the snapshot to inspect/edit it.</p>
+              )}
+            </div>
+            <div className="flex h-full min-h-0 flex-col border-l bg-card p-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Class Tools</p>
+              {snapshotSelection ? (
+                <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                  <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
+                    {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                      <div key={group.key}>
+                        <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
+                        <div className="flex flex-wrap gap-1">
+                          {group.options.map((option) => {
+                            const isActive = snapshotClassTokens.includes(option.value)
+                            return (
+                              <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, '', isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                {option.label}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
+                    {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                      <div key={group.key}>
+                        <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
+                        {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
+                          <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
+                            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
+                            <div className="flex flex-wrap gap-1">
+                              {group.options.map((option) => {
+                                const classToken = `${variant.prefix}${option.value}`
+                                const isActive = snapshotClassTokens.includes(classToken)
+                                return (
+                                  <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix, isActive)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                    {option.label}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-muted-foreground">Select an element in snapshot to show style/layout quick actions.</p>
               )}
             </div>
           </div>

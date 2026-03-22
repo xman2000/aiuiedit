@@ -20,15 +20,22 @@ export const useAppStore = create<AppState>()(
         aiModel: 'kimi-latest',
         recentProjects: [],
         shortcuts: {},
-        canvasViewMode: 'design',
+        canvasViewMode: 'layout',
         livePreviewBaseUrl: 'http://127.0.0.1:8000'
       },
       isWelcomeOpen: true,
       isLoading: false,
       setSettings: (newSettings) =>
-        set((state) => ({
-          settings: { ...state.settings, ...newSettings }
-        })),
+        set((state) => {
+          const normalized = { ...newSettings }
+          if (normalized.canvasViewMode === 'design') {
+            normalized.canvasViewMode = 'layout'
+          }
+
+          return {
+            settings: { ...state.settings, ...normalized }
+          }
+        }),
       setWelcomeOpen: (open) => set({ isWelcomeOpen: open }),
       setLoading: (loading) => set({ isLoading: loading })
     }),
