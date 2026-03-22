@@ -10,6 +10,7 @@ import { PropertiesPanel } from '@/components/panels/PropertiesPanel'
 import { ChatPanel } from '@/components/panels/ChatPanel'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useCanvasStore } from '@/store/useCanvasStore'
+import { useAppStore } from '@/store/useAppStore'
 import { useKeyboardShortcuts } from '@/utils/shortcuts'
 import { Button } from '@/components/common/Button'
 import { FolderUp, Plus } from 'lucide-react'
@@ -123,6 +124,7 @@ export function MainLayout() {
 }
 
 function EmptyState() {
+  const { setSettings } = useAppStore()
   const { setCurrentProject } = useProjectStore()
   const { setNodes, setZoom, setViewport, deselectAll } = useCanvasStore()
   const [isCreating, setIsCreating] = useState(false)
@@ -130,6 +132,15 @@ function EmptyState() {
   const [isImporting, setIsImporting] = useState(false)
   const [workspace, setWorkspace] = useState<string>('')
   const [existingProjects, setExistingProjects] = useState<Array<{ id: string; name: string; path: string; updatedAt?: string }>>([])
+
+  const refreshProjects = async () => {
+    const projects = await window.electron.listProjects()
+    setExistingProjects((projects || []).sort((a: any, b: any) => {
+      const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime()
+      const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime()
+      return bTime - aTime
+    }))
+  }
 
   useEffect(() => {
     // Load workspace path and existing projects
@@ -219,12 +230,7 @@ function EmptyState() {
       setViewport(imported.canvas?.viewport ?? { x: 0, y: 0 })
       deselectAll()
 
-      const projects = await window.electron.listProjects()
-      setExistingProjects((projects || []).sort((a: any, b: any) => {
-        const aTime = new Date(a.updatedAt || a.createdAt || 0).getTime()
-        const bTime = new Date(b.updatedAt || b.createdAt || 0).getTime()
-        return bTime - aTime
-      }))
+      await refreshProjects()
 
       window.showToast('Project imported. Round-trip mapping initialized.', 'success')
     } catch (error) {
@@ -232,6 +238,24 @@ function EmptyState() {
       window.showToast(`Import failed: ${error}`, 'error')
     } finally {
       setIsImporting(false)
+    }
+  }
+
+  const handleChangeWorkspace = async () => {
+    try {
+      const selected = await window.electron.selectDirectory()
+      if (!selected) return
+
+      const current = await window.electron.loadSettings()
+      const nextSettings = { ...current, workspacePath: selected }
+      await window.electron.saveSettings(nextSettings)
+      setSettings({ workspacePath: selected })
+      setWorkspace(selected)
+      await refreshProjects()
+      window.showToast('Workspace updated', 'success')
+    } catch (error) {
+      console.error('Failed to change workspace:', error)
+      window.showToast('Failed to change workspace', 'error')
     }
   }
 
@@ -255,6 +279,9 @@ function EmptyState() {
                 Please restart the app and complete the welcome wizard, or set a workspace in Settings.
               </p>
             </div>
+            <Button variant="outline" onClick={handleChangeWorkspace} size="lg" className="w-full mb-3">
+              Choose Workspace Folder
+            </Button>
           </>
         ) : (
           <p className="mb-6 text-muted-foreground">
@@ -280,6 +307,15 @@ function EmptyState() {
         >
           <FolderUp className="mr-2 h-5 w-5" />
           {isImporting ? 'Importing...' : 'Import Existing Website'}
+        </Button>
+
+        <Button
+          variant="ghost"
+          onClick={handleChangeWorkspace}
+          size="sm"
+          className="mt-2"
+        >
+          Change Workspace Folder
         </Button>
 
         {existingProjects.length > 0 && (

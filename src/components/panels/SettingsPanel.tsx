@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/useAppStore'
 import { Button } from '@/components/common/Button'
-import { Settings, Eye, EyeOff, Save } from 'lucide-react'
+import { Settings, Eye, EyeOff, Save, FolderOpen } from 'lucide-react'
 
 export function SettingsPanel() {
   const { settings, setSettings } = useAppStore()
@@ -9,13 +9,28 @@ export function SettingsPanel() {
   const [showApiKey, setShowApiKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [aiModel, setAiModel] = useState(settings.aiModel || 'kimi-latest')
+  const [workspacePath, setWorkspacePath] = useState(settings.workspacePath || '')
 
   useEffect(() => {
     // Load API key from settings
     if (settings.openRouterApiKey) {
       setApiKey(settings.openRouterApiKey)
     }
-  }, [settings.openRouterApiKey])
+    setAiModel(settings.aiModel || 'kimi-latest')
+    setWorkspacePath(settings.workspacePath || '')
+  }, [settings.openRouterApiKey, settings.aiModel, settings.workspacePath])
+
+  const handleSelectWorkspace = async () => {
+    try {
+      const selected = await window.electron.selectDirectory()
+      if (selected) {
+        setWorkspacePath(selected)
+      }
+    } catch (error) {
+      console.error('Failed to select workspace directory:', error)
+      window.showToast?.('Failed to select workspace directory', 'error')
+    }
+  }
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -23,7 +38,8 @@ export function SettingsPanel() {
       const newSettings = {
         ...settings,
         openRouterApiKey: apiKey,
-        aiModel
+        aiModel,
+        workspacePath
       }
       await window.electron.saveSettings(newSettings)
       setSettings(newSettings)
@@ -106,11 +122,18 @@ export function SettingsPanel() {
           {/* Workspace */}
           <div className="space-y-2">
             <label className="text-sm font-medium">Workspace</label>
+            <p className="text-xs text-muted-foreground">
+              Projects are created and discovered in this directory.
+            </p>
             <div className="rounded-md border bg-muted p-3">
               <p className="text-sm text-muted-foreground break-all">
-                {settings.workspacePath || 'Not configured'}
+                {workspacePath || 'Not configured'}
               </p>
             </div>
+            <Button variant="outline" onClick={handleSelectWorkspace} className="w-full">
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Choose Workspace Folder
+            </Button>
           </div>
         </div>
       </div>
