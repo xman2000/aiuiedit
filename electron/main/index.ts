@@ -10,7 +10,11 @@ const __dirname = dirname(__filename)
 // Enable auto-updater (disabled for dev)
 // updateElectronApp()
 
-let mainWindow: BrowserWindow | null = null
+export let mainWindow: BrowserWindow | null = null
+
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({

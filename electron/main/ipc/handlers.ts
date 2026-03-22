@@ -1,7 +1,8 @@
-import { ipcMain, dialog, app } from 'electron'
+import { ipcMain, dialog, app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { homedir } from 'os'
+import { getMainWindow } from '../index.js'
 
 const AIUIEDIT_DIR = join(homedir(), 'aiuiedit')
 const SETTINGS_FILE = join(AIUIEDIT_DIR, 'settings.json')
@@ -27,9 +28,16 @@ export function setupIPC() {
 
   // Select sandbox directory
   ipcMain.handle('dialog:select-directory', async () => {
-    const result = await dialog.showOpenDialog({
+    const mainWindow = getMainWindow()
+    if (!mainWindow) {
+      console.error('No main window available')
+      return null
+    }
+    
+    const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory'],
-      title: 'Select aiuiedit Workspace Directory'
+      title: 'Select aiuiedit Workspace Directory',
+      buttonLabel: 'Select Folder'
     })
     
     if (result.canceled) {

@@ -10,13 +10,16 @@ export function WelcomeWizard() {
   const { setSettings, setWelcomeOpen } = useAppStore()
 
   const handleSelectDirectory = async () => {
+    console.log('Select directory clicked')
     try {
       const path = await window.electron.selectDirectory()
+      console.log('Selected path:', path)
       if (path) {
         setWorkspacePath(path)
       }
     } catch (error) {
       console.error('Failed to select directory:', error)
+      alert('Error selecting directory: ' + error)
     }
   }
 
@@ -124,17 +127,31 @@ export function WelcomeWizard() {
             <div
               onClick={handleSelectDirectory}
               className="cursor-pointer rounded-lg border-2 border-dashed border-muted-foreground/25 p-8 transition-colors hover:border-primary hover:bg-primary/5"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  handleSelectDirectory()
+                }
+              }}
             >
               <div className="flex flex-col items-center gap-4">
                 <Folder className="h-12 w-12 text-muted-foreground" />
                 <div className="text-center">
-                  <p className="font-medium">
-                    {workspacePath || 'Click to select directory'}
-                  </p>
-                  {workspacePath && (
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {workspacePath}
-                    </p>
+                  {workspacePath ? (
+                    <>
+                      <p className="font-medium text-primary">Directory Selected</p>
+                      <p className="mt-1 text-sm text-muted-foreground break-all">
+                        {workspacePath}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium">Click to select directory</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        Choose where to store your projects
+                      </p>
+                    </>
                   )}
                 </div>
               </div>
