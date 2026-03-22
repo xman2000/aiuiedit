@@ -70,6 +70,8 @@ const RESPONSIVE_GROUP_KEYS = new Set([
   'padding'
 ])
 
+const LAYOUT_GROUP_KEYS = new Set(['display', 'layout', 'direction', 'justify', 'items', 'gap', 'width', 'maxWidth'])
+
 const TAILWIND_CLASS_GROUPS: TailwindClassGroup[] = [
   {
     key: 'display',
@@ -310,6 +312,102 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
     var counter = 0;
     var active = null;
     var selector = 'h1,h2,h3,h4,h5,h6,p,li,a,button,span,img,section,article,div,main,aside,nav';
+    var sizeMap = { 'text-xs': '12px', 'text-sm': '14px', 'text-base': '16px', 'text-lg': '18px', 'text-xl': '20px', 'text-2xl': '24px' };
+    var colorMap = {
+      'text-slate-700': '#334155',
+      'text-slate-900': '#0f172a',
+      'text-blue-600': '#2563eb',
+      'text-green-600': '#16a34a',
+      'text-red-600': '#dc2626',
+      'text-white': '#ffffff',
+      'bg-transparent': 'transparent',
+      'bg-white': '#ffffff',
+      'bg-slate-100': '#f1f5f9',
+      'bg-slate-900': '#0f172a',
+      'bg-blue-600': '#2563eb',
+      'bg-green-600': '#16a34a'
+    };
+    var gapMap = { 'gap-0': '0px', 'gap-2': '8px', 'gap-4': '16px', 'gap-6': '24px', 'gap-8': '32px' };
+    var paddingMap = { 'p-0': '0px', 'p-2': '8px', 'p-4': '16px', 'p-6': '24px', 'p-8': '32px' };
+    var radiusMap = { 'rounded-none': '0px', 'rounded-sm': '2px', 'rounded-md': '6px', 'rounded-lg': '8px', 'rounded-xl': '12px', 'rounded-full': '9999px' };
+    var shadowMap = {
+      'shadow-none': 'none',
+      'shadow-sm': '0 1px 2px rgba(15, 23, 42, 0.1)',
+      'shadow-md': '0 4px 6px rgba(15, 23, 42, 0.12)',
+      'shadow-lg': '0 10px 15px rgba(15, 23, 42, 0.14)',
+      'shadow-xl': '0 20px 25px rgba(15, 23, 42, 0.16)'
+    };
+
+    function applyInlinePreviewStyles(el){
+      if(!el) return;
+      var className = el.getAttribute('class') || '';
+      var tokens = className.split(/\s+/).filter(Boolean).map(function(token){
+        var parts = token.split(':');
+        return parts[parts.length - 1];
+      });
+
+      el.style.display = '';
+      el.style.flexDirection = '';
+      el.style.justifyContent = '';
+      el.style.alignItems = '';
+      el.style.gap = '';
+      el.style.padding = '';
+      el.style.width = '';
+      el.style.maxWidth = '';
+      el.style.textAlign = '';
+      el.style.fontWeight = '';
+      el.style.fontSize = '';
+      el.style.color = '';
+      el.style.backgroundColor = '';
+      el.style.borderRadius = '';
+      el.style.boxShadow = '';
+
+      tokens.forEach(function(token){
+        if(token === 'block' || token === 'inline' || token === 'inline-block' || token === 'flex' || token === 'grid' || token === 'hidden') {
+          el.style.display = token === 'hidden' ? 'none' : token;
+        }
+        if(token === 'flex-row') el.style.flexDirection = 'row';
+        if(token === 'flex-col') el.style.flexDirection = 'column';
+        if(token === 'justify-start') el.style.justifyContent = 'flex-start';
+        if(token === 'justify-center') el.style.justifyContent = 'center';
+        if(token === 'justify-end') el.style.justifyContent = 'flex-end';
+        if(token === 'justify-between') el.style.justifyContent = 'space-between';
+        if(token === 'items-start') el.style.alignItems = 'flex-start';
+        if(token === 'items-center') el.style.alignItems = 'center';
+        if(token === 'items-end') el.style.alignItems = 'flex-end';
+        if(token === 'items-stretch') el.style.alignItems = 'stretch';
+        if(token === 'text-left' || token === 'text-center' || token === 'text-right' || token === 'text-justify') {
+          el.style.textAlign = token.replace('text-', '');
+        }
+        if(token === 'font-light') el.style.fontWeight = '300';
+        if(token === 'font-normal') el.style.fontWeight = '400';
+        if(token === 'font-medium') el.style.fontWeight = '500';
+        if(token === 'font-semibold') el.style.fontWeight = '600';
+        if(token === 'font-bold') el.style.fontWeight = '700';
+        if(sizeMap[token]) el.style.fontSize = sizeMap[token];
+        if(colorMap[token]) {
+          if(token.indexOf('text-') === 0) el.style.color = colorMap[token];
+          if(token.indexOf('bg-') === 0) el.style.backgroundColor = colorMap[token];
+        }
+        if(gapMap[token]) el.style.gap = gapMap[token];
+        if(paddingMap[token]) el.style.padding = paddingMap[token];
+        if(radiusMap[token]) el.style.borderRadius = radiusMap[token];
+        if(shadowMap[token]) el.style.boxShadow = shadowMap[token];
+        if(token === 'w-auto' || token === 'w-fit' || token === 'w-full' || token === 'w-screen') {
+          if(token === 'w-auto') el.style.width = 'auto';
+          if(token === 'w-fit') el.style.width = 'fit-content';
+          if(token === 'w-full') el.style.width = '100%';
+          if(token === 'w-screen') el.style.width = '100vw';
+        }
+        if(token === 'max-w-none') el.style.maxWidth = 'none';
+        if(token === 'max-w-prose') el.style.maxWidth = '65ch';
+        if(token === 'max-w-screen-sm') el.style.maxWidth = '640px';
+        if(token === 'max-w-screen-md') el.style.maxWidth = '768px';
+        if(token === 'max-w-screen-lg') el.style.maxWidth = '1024px';
+        if(token === 'max-w-screen-xl') el.style.maxWidth = '1280px';
+      });
+    }
+
     function mark(el){
       if(active){ active.style.outline = ''; active.style.outlineOffset = ''; }
       active = el;
@@ -369,7 +467,10 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
       if(typeof attributes.href === 'string') el.setAttribute('href', attributes.href);
       if(typeof attributes.src === 'string') el.setAttribute('src', attributes.src);
       if(typeof attributes.alt === 'string') el.setAttribute('alt', attributes.alt);
-      if(typeof attributes.className === 'string') el.setAttribute('class', attributes.className);
+      if(typeof attributes.className === 'string') {
+        el.setAttribute('class', attributes.className);
+        applyInlinePreviewStyles(el);
+      }
       window.parent.postMessage({
         type: 'aiuiedit-updated',
         payload: {
@@ -417,6 +518,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [snapshotSrc, setSnapshotSrc] = useState('')
   const [snapshotAlt, setSnapshotAlt] = useState('')
   const [snapshotClassName, setSnapshotClassName] = useState('')
+  const [inspectorTab, setInspectorTab] = useState<'content' | 'style' | 'layout'>('content')
   const timeoutRef = useRef<number | null>(null)
   const snapshotIframeRef = useRef<HTMLIFrameElement | null>(null)
 
@@ -598,7 +700,29 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   }
 
   const applyClassOption = (group: TailwindClassGroup, optionValue: string, variant: TailwindVariantPrefix = '') => {
-    setSnapshotClassName((prev) => replaceClassGroup(prev, group, optionValue, variant))
+    setSnapshotClassName((prev) => {
+      const nextClassName = replaceClassGroup(prev, group, optionValue, variant)
+
+      if (snapshotSelection?.id && snapshotIframeRef.current?.contentWindow) {
+        const canApplyText = !STRUCTURAL_TAGS.has(snapshotSelection.tag) && snapshotSelection.tag !== 'img'
+        snapshotIframeRef.current.contentWindow.postMessage({
+          type: 'aiuiedit-apply-text',
+          payload: {
+            id: snapshotSelection.id,
+            text: snapshotEditText,
+            applyText: canApplyText,
+            attributes: {
+              href: snapshotHref,
+              src: snapshotSrc,
+              alt: snapshotAlt,
+              className: nextClassName
+            }
+          }
+        }, '*')
+      }
+
+      return nextClassName
+    })
   }
 
   const applySnapshotElementEditToSource = async () => {
@@ -741,93 +865,77 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
               className="h-full w-full border-0"
               sandbox="allow-scripts allow-forms"
             />
-            <div className="border-l bg-card p-3">
+            <div className="flex h-full min-h-0 flex-col border-l bg-card p-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Snapshot Inspector</p>
               {snapshotSelection ? (
-                <div className="mt-3 space-y-2">
+                <div className="mt-3 flex min-h-0 flex-1 flex-col">
                   <p className="text-xs text-muted-foreground">Tag: <span className="font-mono text-foreground">{snapshotSelection.tag}</span></p>
                   {snapshotSelection.isStructural && (
-                    <p className="text-[11px] text-muted-foreground">Container/card mode: edit classes and attributes here; text editing is disabled to avoid flattening child content.</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Container/card mode: edit classes and attributes here; text editing is disabled to avoid flattening child content.</p>
                   )}
-                  <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text</label>
-                  <textarea
-                    value={snapshotEditText}
-                    onChange={(e) => setSnapshotEditText(e.target.value)}
-                    disabled={snapshotSelection.isStructural || snapshotSelection.tag === 'img'}
-                    className="h-36 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
-                  />
-                  {(snapshotSelection.tag === 'a' || snapshotSelection.attributes.href !== undefined) && (
-                    <>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Href</label>
-                      <input
-                        type="text"
-                        value={snapshotHref}
-                        onChange={(e) => setSnapshotHref(e.target.value)}
-                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
-                      />
-                    </>
-                  )}
-                  {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.src !== undefined) && (
-                    <>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Src</label>
-                      <input
-                        type="text"
-                        value={snapshotSrc}
-                        onChange={(e) => setSnapshotSrc(e.target.value)}
-                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
-                      />
-                    </>
-                  )}
-                  {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.alt !== undefined) && (
-                    <>
-                      <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Alt</label>
-                      <input
-                        type="text"
-                        value={snapshotAlt}
-                        onChange={(e) => setSnapshotAlt(e.target.value)}
-                        className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
-                      />
-                    </>
-                  )}
-                  <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
-                  <input
-                    type="text"
-                    value={snapshotClassName}
-                    onChange={(e) => setSnapshotClassName(e.target.value)}
-                    className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
-                  />
-                  <div className="space-y-2 rounded-md border bg-muted/20 p-2">
-                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Quick Edit</p>
-                    <div className="flex flex-wrap gap-1">
-                      {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
-                        <span key={token} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
-                          {token}
-                        </span>
-                      )) : (
-                        <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
-                      )}
-                    </div>
-                    {TAILWIND_CLASS_GROUPS.map((group) => (
-                      <div key={group.key}>
-                        <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
-                        {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
-                          <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
-                            <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
+
+                  <div className="mt-2 grid grid-cols-3 gap-1 rounded-md border bg-muted/30 p-1">
+                    <button type="button" onClick={() => setInspectorTab('content')} className={inspectorTab === 'content' ? 'rounded bg-background px-2 py-1 text-[11px] font-medium' : 'rounded px-2 py-1 text-[11px] text-muted-foreground'}>Content</button>
+                    <button type="button" onClick={() => setInspectorTab('style')} className={inspectorTab === 'style' ? 'rounded bg-background px-2 py-1 text-[11px] font-medium' : 'rounded px-2 py-1 text-[11px] text-muted-foreground'}>Style</button>
+                    <button type="button" onClick={() => setInspectorTab('layout')} className={inspectorTab === 'layout' ? 'rounded bg-background px-2 py-1 text-[11px] font-medium' : 'rounded px-2 py-1 text-[11px] text-muted-foreground'}>Layout</button>
+                  </div>
+
+                  <div className="mt-2 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                    {inspectorTab === 'content' && (
+                      <>
+                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Text</label>
+                        <textarea
+                          value={snapshotEditText}
+                          onChange={(e) => setSnapshotEditText(e.target.value)}
+                          disabled={snapshotSelection.isStructural || snapshotSelection.tag === 'img'}
+                          className="h-36 w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary"
+                        />
+                        {(snapshotSelection.tag === 'a' || snapshotSelection.attributes.href !== undefined) && (
+                          <>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Href</label>
+                            <input type="text" value={snapshotHref} onChange={(e) => setSnapshotHref(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                          </>
+                        )}
+                        {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.src !== undefined) && (
+                          <>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Src</label>
+                            <input type="text" value={snapshotSrc} onChange={(e) => setSnapshotSrc(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                          </>
+                        )}
+                        {(snapshotSelection.tag === 'img' || snapshotSelection.attributes.alt !== undefined) && (
+                          <>
+                            <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Image Alt</label>
+                            <input type="text" value={snapshotAlt} onChange={(e) => setSnapshotAlt(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                          </>
+                        )}
+                      </>
+                    )}
+
+                    {(inspectorTab === 'style' || inspectorTab === 'layout') && (
+                      <>
+                        <label className="block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Class</label>
+                        <input type="text" value={snapshotClassName} onChange={(e) => setSnapshotClassName(e.target.value)} className="w-full rounded-md border bg-background px-2 py-2 text-sm text-foreground outline-none focus:border-primary" />
+                        <div className="flex flex-wrap gap-1 rounded-md border bg-muted/20 p-2">
+                          {snapshotClassTokens.length > 0 ? snapshotClassTokens.map((token) => (
+                            <span key={token} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">{token}</span>
+                          )) : (
+                            <span className="text-[11px] text-muted-foreground">No class tokens on selected element</span>
+                          )}
+                        </div>
+                      </>
+                    )}
+
+                    {inspectorTab === 'style' && (
+                      <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Style Quick Edit</p>
+                        {TAILWIND_CLASS_GROUPS.filter((group) => !LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                          <div key={group.key}>
+                            <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
                             <div className="flex flex-wrap gap-1">
                               {group.options.map((option) => {
-                                const classToken = `${variant.prefix}${option.value}`
-                                const isActive = snapshotClassTokens.includes(classToken)
+                                const isActive = snapshotClassTokens.includes(option.value)
                                 return (
-                                  <button
-                                    key={`${group.key}-${variant.prefix}-${option.value}`}
-                                    type="button"
-                                    onClick={() => applyClassOption(group, option.value, variant.prefix)}
-                                    className={
-                                      isActive
-                                        ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground'
-                                        : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'
-                                    }
-                                  >
+                                  <button key={`${group.key}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
                                     {option.label}
                                   </button>
                                 )
@@ -836,18 +944,43 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                           </div>
                         ))}
                       </div>
-                    ))}
+                    )}
+
+                    {inspectorTab === 'layout' && (
+                      <div className="space-y-2 rounded-md border bg-muted/20 p-2">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tailwind Layout Quick Edit</p>
+                        {TAILWIND_CLASS_GROUPS.filter((group) => LAYOUT_GROUP_KEYS.has(group.key)).map((group) => (
+                          <div key={group.key}>
+                            <p className="mb-1 text-[11px] text-muted-foreground">{group.label}</p>
+                            {(RESPONSIVE_GROUP_KEYS.has(group.key) ? TAILWIND_VARIANTS : [TAILWIND_VARIANTS[0]]).map((variant) => (
+                              <div key={`${group.key}-${variant.prefix || 'base'}`} className="mb-1">
+                                <p className="mb-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">{variant.label}</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {group.options.map((option) => {
+                                    const classToken = `${variant.prefix}${option.value}`
+                                    const isActive = snapshotClassTokens.includes(classToken)
+                                    return (
+                                      <button key={`${group.key}-${variant.prefix}-${option.value}`} type="button" onClick={() => applyClassOption(group, option.value, variant.prefix)} className={isActive ? 'rounded border border-primary bg-primary px-2 py-1 text-[11px] text-primary-foreground' : 'rounded border bg-background px-2 py-1 text-[11px] text-foreground hover:border-primary/60'}>
+                                        {option.label}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <Button size="sm" variant="outline" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
-                  <Button
-                    size="sm"
-                    className="w-full"
-                    onClick={applySnapshotElementEditToSource}
-                    disabled={!currentProject?.source?.roundTrip}
-                  >
-                    Apply to Source
-                  </Button>
-                  <p className="text-[11px] text-muted-foreground">Apply to Source writes atomic text/attribute patches to the mapped page file, then refreshes snapshot.</p>
+
+                  <div className="mt-2 space-y-2 border-t pt-2">
+                    <Button size="sm" variant="outline" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
+                    <Button size="sm" className="w-full" onClick={applySnapshotElementEditToSource} disabled={!currentProject?.source?.roundTrip}>
+                      Apply to Source
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground">Apply to Source writes atomic text/attribute patches to the mapped page file, then refreshes snapshot.</p>
+                  </div>
                 </div>
               ) : (
                 <p className="mt-3 text-xs text-muted-foreground">Click any text element, image, or container/card in the snapshot to inspect/edit it.</p>

@@ -2,7 +2,7 @@ import { useAppStore } from '@/store/useAppStore'
 import { useProjectStore } from '@/store/useProjectStore'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { Button } from '@/components/common/Button'
-import { Moon, Sun, Monitor, Save, Undo, Redo, ZoomIn, ZoomOut, FileCode, FileText, Group, Ungroup, Lock, Unlock, Eye, EyeOff, RefreshCcw } from 'lucide-react'
+import { Moon, Sun, Monitor, Save, Undo, Redo, ZoomIn, ZoomOut, FileCode, FileText, Group, Ungroup, Lock, Unlock, Eye, EyeOff, RefreshCcw, AlignHorizontalJustifyStart, AlignHorizontalJustifyCenter, AlignHorizontalJustifyEnd, AlignVerticalJustifyStart, AlignVerticalJustifyCenter, AlignVerticalJustifyEnd, ArrowLeftRight, ArrowUpDown } from 'lucide-react'
 import { exportAsHtml, exportAsReact, exportAsVue } from '@/services/export'
 
 export function Toolbar() {
@@ -237,14 +237,30 @@ export function Toolbar() {
         </div>
 
         <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1 py-1">
-          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('left')} title="Align Left">L</Button>
-          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('center')} title="Align Center">C</Button>
-          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('right')} title="Align Right">R</Button>
-          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('top')} title="Align Top">T</Button>
-          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('middle')} title="Align Middle">M</Button>
-          <Button variant="ghost" size="sm" disabled={selectedCount === 0} onClick={() => handleAlign('bottom')} title="Align Bottom">B</Button>
-          <Button variant="ghost" size="sm" disabled={selectedCount < 3} onClick={() => handleDistribute('horizontal')} title="Distribute Horizontally">Dist H</Button>
-          <Button variant="ghost" size="sm" disabled={selectedCount < 3} onClick={() => handleDistribute('vertical')} title="Distribute Vertically">Dist V</Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount === 0} onClick={() => handleAlign('left')} title="Align Left" aria-label="Align Left">
+            <AlignHorizontalJustifyStart className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount === 0} onClick={() => handleAlign('center')} title="Align Center" aria-label="Align Center">
+            <AlignHorizontalJustifyCenter className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount === 0} onClick={() => handleAlign('right')} title="Align Right" aria-label="Align Right">
+            <AlignHorizontalJustifyEnd className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount === 0} onClick={() => handleAlign('top')} title="Align Top" aria-label="Align Top">
+            <AlignVerticalJustifyStart className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount === 0} onClick={() => handleAlign('middle')} title="Align Middle" aria-label="Align Middle">
+            <AlignVerticalJustifyCenter className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount === 0} onClick={() => handleAlign('bottom')} title="Align Bottom" aria-label="Align Bottom">
+            <AlignVerticalJustifyEnd className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount < 3} onClick={() => handleDistribute('horizontal')} title="Distribute Horizontally" aria-label="Distribute Horizontally">
+            <ArrowLeftRight className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={selectedCount < 3} onClick={() => handleDistribute('vertical')} title="Distribute Vertically" aria-label="Distribute Vertically">
+            <ArrowUpDown className="h-4 w-4" />
+          </Button>
         </div>
 
         {selectedCount > 0 && (
