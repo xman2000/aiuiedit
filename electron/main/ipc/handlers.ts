@@ -2,6 +2,7 @@ import { ipcMain, dialog, app } from 'electron'
 import { join } from 'path'
 import { promises as fs } from 'fs'
 import { homedir } from 'os'
+import { randomUUID } from 'crypto'
 import { getMainWindow } from '../index.js'
 
 const AIUIEDIT_DIR = join(homedir(), 'aiuiedit')
@@ -122,7 +123,7 @@ export function setupIPC() {
     await fs.mkdir(join(projectDir, 'exports'), { recursive: true })
 
     const project = {
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       name,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
