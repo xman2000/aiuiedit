@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+const { contextBridge, ipcRenderer } = require('electron')
 
 console.log('Preload script executing...')
 
@@ -11,14 +11,14 @@ const electronAPI = {
   selectDirectory: () => ipcRenderer.invoke('dialog:select-directory'),
 
   // Settings
-  saveSettings: (settings: any) => ipcRenderer.invoke('settings:save', settings),
+  saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   loadSettings: () => ipcRenderer.invoke('settings:load'),
 
   // Projects
   listProjects: () => ipcRenderer.invoke('projects:list'),
-  createProject: (name: string) => ipcRenderer.invoke('projects:create', name),
-  loadProject: (path: string) => ipcRenderer.invoke('projects:load', path),
-  saveProject: (path: string, data: any) => ipcRenderer.invoke('projects:save', path, data)
+  createProject: (name) => ipcRenderer.invoke('projects:create', name),
+  loadProject: (path) => ipcRenderer.invoke('projects:load', path),
+  saveProject: (path, data) => ipcRenderer.invoke('projects:save', path, data)
 }
 
 // Expose API to window
