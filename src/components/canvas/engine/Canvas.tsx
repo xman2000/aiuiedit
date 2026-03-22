@@ -121,7 +121,6 @@ export function Canvas() {
 
     keptNodes.forEach((node) => nextNodes.set(node.id, node))
 
-    let y = 28
     const makeNodeId = () => `node-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     const headingNode = {
@@ -129,7 +128,7 @@ export function Canvas() {
       type: 'heading',
       pageId: currentPage.id,
       parentId: null,
-      position: { x: 32, y },
+      position: { x: 32, y: 28 },
       size: { width: 760, height: 56 },
       style: {
         color: '#111827',
@@ -144,7 +143,6 @@ export function Canvas() {
       visible: true
     }
     nextNodes.set(headingNode.id, headingNode as CanvasNode)
-    y += 80
 
     const chooseTextColor = (className?: string): string => {
       const classes = (className || '').toLowerCase()
@@ -169,7 +167,31 @@ export function Canvas() {
       return ['#111827', '#1d4ed8'].includes(normalized)
     }
 
-    payload.blocks.slice(0, 60).forEach((block) => {
+    const pageWidth = 1120
+    const maxY = 740
+    const columns = 3
+    const gutter = 18
+    const columnWidth = Math.floor((pageWidth - gutter * (columns - 1)) / columns)
+    const columnHeights = Array.from({ length: columns }, () => 120)
+
+    const placeNode = (preferredHeight: number): { x: number; y: number; width: number; canPlace: boolean } => {
+      let targetIndex = 0
+      for (let i = 1; i < columnHeights.length; i += 1) {
+        if (columnHeights[i] < columnHeights[targetIndex]) targetIndex = i
+      }
+
+      const yPos = columnHeights[targetIndex]
+      const canPlace = yPos + preferredHeight <= maxY
+      const xPos = 32 + targetIndex * (columnWidth + gutter)
+
+      if (canPlace) {
+        columnHeights[targetIndex] += preferredHeight + 12
+      }
+
+      return { x: xPos, y: yPos, width: columnWidth, canPlace }
+    }
+
+    payload.blocks.slice(0, 220).forEach((block) => {
       const id = makeNodeId()
       const isHeading = block.type === 'heading'
       const type =
@@ -192,24 +214,38 @@ export function Canvas() {
         ? '#FFFFFF'
         : textColorFromClass
 
+      const preferredHeight =
+        type === 'image'
+          ? 180
+          : type === 'card'
+            ? 140
+            : isHeading
+              ? 58
+              : type === 'button'
+                ? 48
+                : 56
+
+      const placement = placeNode(preferredHeight)
+      if (!placement.canPlace) return
+
       const node = {
         id,
         type,
         pageId: currentPage.id,
         parentId: null,
-        position: { x: 32, y },
+        position: { x: placement.x, y: placement.y },
         size: {
-          width: type === 'button' ? 260 : 760,
+          width: type === 'button' ? Math.min(placement.width, 260) : placement.width,
           height:
             type === 'image'
-              ? 320
+              ? 180
               : type === 'card'
-                ? 170
+                ? 140
                 : isHeading
-                  ? 50
+                  ? 58
                   : type === 'button'
-                    ? 44
-                    : 42
+                    ? 48
+                    : 56
         },
         style: type === 'button'
           ? {
@@ -218,7 +254,7 @@ export function Canvas() {
               borderRadius: '8px',
               border: 'none',
               padding: '10px 14px',
-              width: '260px',
+              width: `${Math.min(placement.width, 260)}px`,
               fontWeight: '600'
             }
           : type === 'link'
@@ -266,7 +302,6 @@ export function Canvas() {
       }
 
       nextNodes.set(id, node as CanvasNode)
-      y += type === 'image' ? 340 : type === 'card' ? 190 : isHeading ? 64 : 56
     })
 
     setNodes(nextNodes)

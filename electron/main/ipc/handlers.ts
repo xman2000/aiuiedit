@@ -211,7 +211,7 @@ function extractRenderedPreviewBlocks(html: string): PreviewCaptureResult['block
   const seen = new Set<string>()
 
   const pushBlock = (block: PreviewCaptureResult['blocks'][number]) => {
-    const key = `${block.type}|${(block.text || '').slice(0, 80)}|${block.src || ''}|${block.href || ''}`
+    const key = `${block.type}|${block.text || ''}|${block.src || ''}|${block.href || ''}`
     if (seen.has(key)) return
     seen.add(key)
     blocks.push(block)
@@ -221,7 +221,7 @@ function extractRenderedPreviewBlocks(html: string): PreviewCaptureResult['block
     .replace(/<script\b[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style\b[\s\S]*?<\/style>/gi, ' ')
 
-  const tokenRegex = /<(h[1-3]|p|button|a|section|article|div)\b([^>]*)>([\s\S]*?)<\/\1>|<(img)\b([^>]*)\/?>/gi
+  const tokenRegex = /<(h[1-6]|p|li|blockquote|button|a|section|article|div)\b([^>]*)>([\s\S]*?)<\/\1>|<(img)\b([^>]*)\/?>/gi
   let match: RegExpExecArray | null
 
   while ((match = tokenRegex.exec(cleanedHtml)) !== null) {
@@ -234,7 +234,7 @@ function extractRenderedPreviewBlocks(html: string): PreviewCaptureResult['block
       const alt = htmlToText(readAttr(attrs, 'alt') || 'Image')
       const className = readAttr(attrs, 'class')
       pushBlock({ type: 'image', text: alt, src, className })
-      if (blocks.length >= 160) return blocks
+      if (blocks.length >= 400) return blocks
       continue
     }
 
@@ -247,8 +247,8 @@ function extractRenderedPreviewBlocks(html: string): PreviewCaptureResult['block
       if (text.length >= 3) {
         pushBlock({ type: 'heading', text, className })
       }
-    } else if (tag === 'p') {
-      if (text.length >= 20) {
+    } else if (tag === 'p' || tag === 'li' || tag === 'blockquote') {
+      if (text.length >= 8) {
         pushBlock({ type: 'text', text, className })
       }
     } else if (tag === 'button') {
@@ -261,12 +261,22 @@ function extractRenderedPreviewBlocks(html: string): PreviewCaptureResult['block
         pushBlock({ type: 'link', text, href, className })
       }
     } else if ((tag === 'section' || tag === 'article' || tag === 'div') && looksLikeCardClass(className)) {
-      if (text.length >= 28) {
+      if (text.length >= 14) {
         pushBlock({ type: 'card', text: text.slice(0, 280), className })
       }
     }
 
-    if (blocks.length >= 160) return blocks
+    if (blocks.length >= 400) return blocks
+  }
+
+  if (blocks.length < 20) {
+    const textFallbacks = collectFallbackTextChunks(cleanedHtml)
+    textFallbacks.forEach((chunk, index) => {
+      pushBlock({
+        type: index === 0 ? 'heading' : 'text',
+        text: chunk.slice(0, index === 0 ? 120 : 220)
+      })
+    })
   }
 
   return blocks
