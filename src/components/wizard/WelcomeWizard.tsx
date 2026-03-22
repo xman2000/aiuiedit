@@ -50,7 +50,7 @@ export function WelcomeWizard() {
           <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <span className="text-3xl font-bold">CA</span>
           </div>
-          <h1 className="mb-2 text-3xl font-bold">Welcome to CanvasAI</h1>
+          <h1 className="mb-2 text-3xl font-bold">Welcome to aiuiedit</h1>
           <p className="text-muted-foreground">
             AI-powered visual UI builder
           </p>
@@ -187,7 +187,7 @@ export function WelcomeWizard() {
               disabled={isLoading}
               className="w-full"
             >
-              {isLoading ? 'Setting up...' : 'Launch CanvasAI'}
+              {isLoading ? 'Setting up...' : 'Launch aiuiedit'}
               {!isLoading && <ArrowRight className="ml-2 h-4 w-4" />}
             </Button>
           </div>

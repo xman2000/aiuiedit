@@ -1,4 +1,4 @@
-# CanvasAI - Development Progress Report
+# aiuiedit - Development Progress Report
 
 ## Current Status: FUNCTIONAL MVP
 
@@ -137,7 +137,7 @@
 
 #### File Organization
 ```
-canvasai/
+aiuiedit/
 ├── electron/           # Main process
 │   ├── main/          # Window management, IPC
 │   └── preload/       # Secure bridge
@@ -165,7 +165,7 @@ Project.canvas/
 
 // Component Package Format (npm-style)
 @author/package/
-├── package.json     # Manifest with canvasai field
+├── package.json     # Manifest with aiuiedit field
 ├── schema.json      # Property definitions
 └── src/            # Component code
 ```
@@ -196,13 +196,13 @@ npm run dev
 npm run build
 
 # The built app is at:
-# release/CanvasAI-1.0.0.AppImage
+# release/aiuiedit-1.0.0.AppImage
 ```
 
 ### 📝 Notes
 
 - The app is fully functional as a local desktop application
-- All data is stored in `~/CanvasAI/` directory
+- All data is stored in `~/aiuiedit/` directory
 - No cloud services required (future feature)
 - AI commands are processed locally (OpenRouter integration ready)
 - Security: Sandboxed file operations, CSP headers

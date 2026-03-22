@@ -3,18 +3,18 @@ import { join } from 'path'
 import { promises as fs } from 'fs'
 import { homedir } from 'os'
 
-const CANVASAI_DIR = join(homedir(), 'CanvasAI')
-const SETTINGS_FILE = join(CANVASAI_DIR, 'settings.json')
+const AIUIEDIT_DIR = join(homedir(), 'aiuiedit')
+const SETTINGS_FILE = join(AIUIEDIT_DIR, 'settings.json')
 
-// Ensure CanvasAI directory exists
-async function ensureCanvasAIDir() {
+// Ensure aiuiedit directory exists
+async function ensureaiuieditDir() {
   try {
-    await fs.access(CANVASAI_DIR)
+    await fs.access(AIUIEDIT_DIR)
   } catch {
-    await fs.mkdir(CANVASAI_DIR, { recursive: true })
-    await fs.mkdir(join(CANVASAI_DIR, 'projects'), { recursive: true })
-    await fs.mkdir(join(CANVASAI_DIR, 'assets'), { recursive: true })
-    await fs.mkdir(join(CANVASAI_DIR, 'cache'), { recursive: true })
+    await fs.mkdir(AIUIEDIT_DIR, { recursive: true })
+    await fs.mkdir(join(AIUIEDIT_DIR, 'projects'), { recursive: true })
+    await fs.mkdir(join(AIUIEDIT_DIR, 'assets'), { recursive: true })
+    await fs.mkdir(join(AIUIEDIT_DIR, 'cache'), { recursive: true })
   }
 }
 
@@ -29,7 +29,7 @@ export function setupIPC() {
   ipcMain.handle('dialog:select-directory', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
-      title: 'Select CanvasAI Workspace Directory'
+      title: 'Select aiuiedit Workspace Directory'
     })
     
     if (result.canceled) {
@@ -41,21 +41,21 @@ export function setupIPC() {
 
   // Save settings
   ipcMain.handle('settings:save', async (_event, settings) => {
-    await ensureCanvasAIDir()
+    await ensureaiuieditDir()
     await fs.writeFile(SETTINGS_FILE, JSON.stringify(settings, null, 2))
     return true
   })
 
   // Load settings
   ipcMain.handle('settings:load', async () => {
-    await ensureCanvasAIDir()
+    await ensureaiuieditDir()
     try {
       const data = await fs.readFile(SETTINGS_FILE, 'utf-8')
       return JSON.parse(data)
     } catch {
       // Return default settings
       return {
-        workspacePath: CANVASAI_DIR,
+        workspacePath: AIUIEDIT_DIR,
         theme: 'system',
         aiModel: 'kimi-latest',
         recentProjects: [],
@@ -66,8 +66,8 @@ export function setupIPC() {
 
   // List projects
   ipcMain.handle('projects:list', async () => {
-    await ensureCanvasAIDir()
-    const projectsDir = join(CANVASAI_DIR, 'projects')
+    await ensureaiuieditDir()
+    const projectsDir = join(AIUIEDIT_DIR, 'projects')
     try {
       const entries = await fs.readdir(projectsDir, { withFileTypes: true })
       const projects = []
@@ -97,8 +97,8 @@ export function setupIPC() {
 
   // Create new project
   ipcMain.handle('projects:create', async (_event, name: string) => {
-    await ensureCanvasAIDir()
-    const projectDir = join(CANVASAI_DIR, 'projects', `${name}.canvas`)
+    await ensureaiuieditDir()
+    const projectDir = join(AIUIEDIT_DIR, 'projects', `${name}.canvas`)
     
     try {
       await fs.access(projectDir)

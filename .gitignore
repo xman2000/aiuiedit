@@ -62,5 +62,5 @@ app/
 .pnp.*
 
 # Local settings (user-specific)
-CanvasAI/
+aiuiedit/
 settings.json

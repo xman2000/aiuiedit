@@ -31,7 +31,7 @@ export const useAppStore = create<AppState>()(
       setLoading: (loading) => set({ isLoading: loading })
     }),
     {
-      name: 'canvasai-storage'
+      name: 'aiuiedit-storage'
     }
   )
 )

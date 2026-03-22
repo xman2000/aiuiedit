@@ -1,4 +1,4 @@
-# CanvasAI
+# aiuiedit
 
 AI-powered visual UI builder with marketplace integration.
 
@@ -56,7 +56,7 @@ Try these natural language commands in the AI chat:
 
 Project structure:
 ```
-canvasai/
+aiuiedit/
 ├── electron/          # Main process
 ├── src/              # React app
 │   ├── canvas/      # Canvas engine
