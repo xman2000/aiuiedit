@@ -115,35 +115,68 @@ async function pathExists(path: string): Promise<boolean> {
 }
 
 async function detectFramework(sourceRoot: string): Promise<{ framework: SupportedFramework; entryFile: string | null }> {
-  const checks = {
-    nextConfig: await pathExists(join(sourceRoot, 'next.config.js')) || await pathExists(join(sourceRoot, 'next.config.mjs')),
-    appPage: await pathExists(join(sourceRoot, 'app', 'page.tsx')),
-    srcAppPage: await pathExists(join(sourceRoot, 'src', 'app', 'page.tsx')),
-    pagesIndex: await pathExists(join(sourceRoot, 'pages', 'index.tsx')),
-    srcPagesIndex: await pathExists(join(sourceRoot, 'src', 'pages', 'index.tsx')),
-    viteConfig: await pathExists(join(sourceRoot, 'vite.config.ts')) || await pathExists(join(sourceRoot, 'vite.config.js')),
-    srcMain: await pathExists(join(sourceRoot, 'src', 'main.tsx'))
+  const findFirstExisting = async (candidates: string[]): Promise<string | null> => {
+    for (const candidate of candidates) {
+      if (await pathExists(candidate)) return candidate
+    }
+    return null
   }
 
-  if (checks.nextConfig || checks.appPage || checks.srcAppPage || checks.pagesIndex || checks.srcPagesIndex) {
-    const entryFile =
-      (checks.appPage && join(sourceRoot, 'app', 'page.tsx')) ||
-      (checks.srcAppPage && join(sourceRoot, 'src', 'app', 'page.tsx')) ||
-      (checks.pagesIndex && join(sourceRoot, 'pages', 'index.tsx')) ||
-      (checks.srcPagesIndex && join(sourceRoot, 'src', 'pages', 'index.tsx')) ||
-      null
+  const nextConfig = await findFirstExisting([
+    join(sourceRoot, 'next.config.js'),
+    join(sourceRoot, 'next.config.mjs'),
+    join(sourceRoot, 'next.config.ts')
+  ])
 
-    return { framework: 'nextjs', entryFile }
+  const nextEntry = await findFirstExisting([
+    join(sourceRoot, 'app', 'page.tsx'),
+    join(sourceRoot, 'app', 'page.jsx'),
+    join(sourceRoot, 'app', 'page.js'),
+    join(sourceRoot, 'app', 'layout.tsx'),
+    join(sourceRoot, 'app', 'layout.jsx'),
+    join(sourceRoot, 'app', 'layout.js'),
+    join(sourceRoot, 'src', 'app', 'page.tsx'),
+    join(sourceRoot, 'src', 'app', 'page.jsx'),
+    join(sourceRoot, 'src', 'app', 'page.js'),
+    join(sourceRoot, 'src', 'app', 'layout.tsx'),
+    join(sourceRoot, 'src', 'app', 'layout.jsx'),
+    join(sourceRoot, 'src', 'app', 'layout.js'),
+    join(sourceRoot, 'pages', 'index.tsx'),
+    join(sourceRoot, 'pages', 'index.jsx'),
+    join(sourceRoot, 'pages', 'index.js'),
+    join(sourceRoot, 'src', 'pages', 'index.tsx'),
+    join(sourceRoot, 'src', 'pages', 'index.jsx'),
+    join(sourceRoot, 'src', 'pages', 'index.js')
+  ])
+
+  if (nextConfig || nextEntry) {
+    return { framework: 'nextjs', entryFile: nextEntry }
   }
 
-  if (checks.viteConfig || checks.srcMain) {
-    const entryFile = await pathExists(join(sourceRoot, 'src', 'App.tsx'))
-      ? join(sourceRoot, 'src', 'App.tsx')
-      : null
-    return { framework: 'react-vite', entryFile }
+  const viteConfig = await findFirstExisting([
+    join(sourceRoot, 'vite.config.ts'),
+    join(sourceRoot, 'vite.config.js'),
+    join(sourceRoot, 'vite.config.mjs')
+  ])
+  const viteEntry = await findFirstExisting([
+    join(sourceRoot, 'src', 'App.tsx'),
+    join(sourceRoot, 'src', 'App.jsx'),
+    join(sourceRoot, 'src', 'App.js'),
+    join(sourceRoot, 'src', 'main.tsx'),
+    join(sourceRoot, 'src', 'main.jsx'),
+    join(sourceRoot, 'src', 'main.js')
+  ])
+
+  if (viteConfig || viteEntry) {
+    return { framework: 'react-vite', entryFile: viteEntry }
   }
 
-  return { framework: 'unknown', entryFile: null }
+  const staticEntry = await findFirstExisting([
+    join(sourceRoot, 'index.html'),
+    join(sourceRoot, 'public', 'index.html')
+  ])
+
+  return { framework: 'unknown', entryFile: staticEntry }
 }
 
 function buildImportedNodes(sourceCode: string, sourcePath: string, sourceRoot: string): { nodes: ImportedNode[]; mappings: SourceMappingItem[] } {
