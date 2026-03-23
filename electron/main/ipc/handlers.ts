@@ -201,6 +201,7 @@ interface WireframeCaptureResult {
   elements: WireframeElement[]
   pageWidth: number
   pageHeight: number
+  colors?: string[]
 }
 
 const TAG_TO_COMPONENT: Record<string, string> = {
@@ -1592,7 +1593,15 @@ export function setupIPC() {
           const selector = 'h1,h2,h3,h4,h5,h6,p,li,a,button,span,img,section,article,div,main,aside,nav,header,footer';
           const elements = Array.from(document.querySelectorAll(selector));
           const wireframeElements = [];
+          const allColors = new Set();
           let counter = 0;
+          
+          // Helper to extract colors
+          const addColor = (color) => {
+            if (color && color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)') {
+              allColors.add(color);
+            }
+          };
           
           // Build parent-child relationships
           const elementMap = new Map();
@@ -1606,6 +1615,12 @@ export function setupIPC() {
             // Skip invisible or tiny elements
             if (rect.width < 2 || rect.height < 2) return;
             if (rect.top < 0 || rect.left < 0) return;
+            
+            // Get computed styles
+            const computedStyle = window.getComputedStyle(el);
+            addColor(computedStyle.backgroundColor);
+            addColor(computedStyle.color);
+            addColor(computedStyle.borderColor);
             
             counter++;
             const id = 'wf-' + counter;
@@ -1635,6 +1650,16 @@ export function setupIPC() {
                 href: el.getAttribute('href') || undefined,
                 src: el.getAttribute('src') || undefined,
                 alt: el.getAttribute('alt') || undefined
+              },
+              computedStyle: {
+                backgroundColor: computedStyle.backgroundColor,
+                color: computedStyle.color,
+                fontSize: computedStyle.fontSize,
+                fontWeight: computedStyle.fontWeight,
+                fontFamily: computedStyle.fontFamily,
+                padding: computedStyle.padding,
+                margin: computedStyle.margin,
+                borderRadius: computedStyle.borderRadius
               }
             };
             
@@ -1685,7 +1710,8 @@ export function setupIPC() {
           return {
             elements: wireframeElements,
             pageWidth: Math.round(Math.max(bodyRect.width, 1200)),
-            pageHeight: Math.round(Math.max(docHeight, 800))
+            pageHeight: Math.round(Math.max(docHeight, 800)),
+            colors: Array.from(allColors).slice(0, 20)
           };
         })()
       `)
@@ -1699,7 +1725,8 @@ export function setupIPC() {
         title,
         elements: result.elements,
         pageWidth: result.pageWidth,
-        pageHeight: result.pageHeight
+        pageHeight: result.pageHeight,
+        colors: result.colors || []
       }
     } catch (error: any) {
       throw new Error('Wireframe capture failed: ' + error.message)

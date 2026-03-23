@@ -137,9 +137,20 @@ declare global {
           level: number
           isStructural: boolean
           attributes: { href?: string; src?: string; alt?: string }
+          computedStyle?: {
+            backgroundColor?: string
+            color?: string
+            fontSize?: string
+            fontWeight?: string
+            fontFamily?: string
+            padding?: string
+            margin?: string
+            borderRadius?: string
+          }
         }>
         pageWidth: number
         pageHeight: number
+        colors?: string[]
       }>
     }
     showToast: (message: string, type?: 'success' | 'error' | 'info') => void
