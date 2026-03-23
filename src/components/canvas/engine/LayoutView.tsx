@@ -169,10 +169,15 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
   }, [wireframeData])
 
   const filteredElements = useMemo(() => {
-    if (filterTag === 'all') return allElements
-    if (filterTag === 'structural') return allElements.filter((el) => el.isStructural)
-    if (filterTag === 'content') return allElements.filter((el) => !el.isStructural)
-    return allElements.filter((el) => el.tag === filterTag)
+    let filtered: WireframeElement[]
+    if (filterTag === 'all') filtered = [...allElements]
+    else if (filterTag === 'structural') filtered = allElements.filter((el) => el.isStructural)
+    else if (filterTag === 'content') filtered = allElements.filter((el) => !el.isStructural)
+    else filtered = allElements.filter((el) => el.tag === filterTag)
+    
+    // Sort by level (higher level = deeper in hierarchy = rendered on top)
+    // This ensures children are clickable above their parents
+    return filtered.sort((a, b) => a.level - b.level)
   }, [allElements, filterTag])
 
   const selectedElement = useMemo(() => {
