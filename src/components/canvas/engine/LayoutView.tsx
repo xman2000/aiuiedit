@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2, RefreshCw, Loader2, Move, Target, Palette, Search, Smartphone, Monitor, Tablet, Copy, Trash2, Focus, Undo2, Redo2, Scissors, AlignCenter, Maximize } from 'lucide-react'
+import { Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2, RefreshCw, Loader2, Move, Target, Palette, Search, Smartphone, Monitor, Tablet, Copy, Trash2, Focus, Undo2, Redo2, Scissors, AlignCenter, Maximize, AlignLeft, AlignRight, AlignVerticalJustifyCenter, ArrowLeftRight, ArrowUpDown, Lock, Unlock, Group, Ungroup, Eye, Ruler } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { useAppStore } from '@/store/useAppStore'
