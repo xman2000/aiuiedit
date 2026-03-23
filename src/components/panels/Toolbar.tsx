@@ -142,7 +142,7 @@ export function Toolbar() {
   }
 
   return (
-    <div className="flex h-14 items-center justify-between border-b bg-card px-4 py-2">
+    <div className="flex flex-wrap items-center justify-between border-b bg-card px-4 py-2 gap-y-2">
       {/* Left: Project Info */}
       <div className="flex items-center gap-4">
         {currentProject && (
@@ -156,7 +156,7 @@ export function Toolbar() {
       </div>
 
       {/* Center: Actions */}
-      <div className="flex items-center gap-2 overflow-x-auto py-1">
+      <div className="flex flex-wrap items-center gap-2 py-1">
         <div className="flex items-center gap-1 rounded-md border bg-muted/30 px-1 py-1">
           <Button
             variant="ghost"
