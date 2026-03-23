@@ -654,7 +654,7 @@ function WireframeBox({ element, position, isSelected, isHovered, showLabel, sho
         height: element.rect.height,
         border: `${showStructure ? '1' : '0'}px solid ${getBorderColor()}`,
         backgroundColor: getBackgroundColor(),
-        zIndex: isSelected ? 100 : isHovered ? 50 : 10 - element.level
+        zIndex: isSelected ? 100 : isHovered ? 50 : element.level + 1
       }}
       onClick={handleClick}
       onMouseDown={onMouseDown}
