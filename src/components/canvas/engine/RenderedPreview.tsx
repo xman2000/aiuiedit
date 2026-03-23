@@ -23,6 +23,8 @@ interface RenderedPreviewProps {
 
 type PreviewMode = 'embedded' | 'snapshot'
 
+type EmbeddedDiagnosticCode = 'loading' | 'loaded' | 'timeout' | 'dns' | 'refused' | 'frame_policy' | 'network'
+
 interface SnapshotSelection {
   id: string
   tag: string
@@ -660,6 +662,8 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
   const [previewMode, setPreviewMode] = useState<PreviewMode>('embedded')
   const [statusMessage, setStatusMessage] = useState('')
   const [embeddedLoaded, setEmbeddedLoaded] = useState(false)
+  const [embeddedDiagnostic, setEmbeddedDiagnostic] = useState<{ code: EmbeddedDiagnosticCode; detail: string } | null>(null)
+  const [snapshotFetchStatus, setSnapshotFetchStatus] = useState<{ ok: boolean; error?: string } | null>(null)
   const [snapshotSelection, setSnapshotSelection] = useState<SnapshotSelection | null>(null)
   const [snapshotEditText, setSnapshotEditText] = useState('')
   const [snapshotHref, setSnapshotHref] = useState('')
@@ -798,17 +802,35 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
       setSnapshotHtml(captured.html)
       setSnapshotTitle(captured.title)
       setSnapshotBlocks(captured.blocks)
+      setSnapshotFetchStatus({ ok: true })
       setStatusMessage(`Snapshot loaded: ${captured.blocks.length} content blocks detected`)
     } catch (error) {
       console.error('Snapshot load failed:', error)
-      setStatusMessage(`Snapshot failed: ${error}`)
+      const errorText = String(error)
+      setSnapshotFetchStatus({ ok: false, error: errorText })
+      setStatusMessage(`Snapshot failed: ${errorText}`)
     } finally {
       setIsLoadingSnapshot(false)
     }
   }
 
+  const classifyNetworkIssue = (rawError: string): { code: EmbeddedDiagnosticCode; detail: string } => {
+    const lower = rawError.toLowerCase()
+    if (lower.includes('enotfound') || lower.includes('could not resolve') || lower.includes('dns')) {
+      return { code: 'dns', detail: 'DNS lookup failed for preview host.' }
+    }
+    if (lower.includes('econnrefused') || lower.includes('failed to connect') || lower.includes('connection refused')) {
+      return { code: 'refused', detail: 'Preview server refused the connection (check port/server).' }
+    }
+    if (lower.includes('timed out') || lower.includes('etimedout') || lower.includes('timeout')) {
+      return { code: 'timeout', detail: 'Preview request timed out.' }
+    }
+    return { code: 'network', detail: 'Preview request failed due to a network/runtime issue.' }
+  }
+
   useEffect(() => {
     setEmbeddedLoaded(false)
+    setEmbeddedDiagnostic({ code: 'loading', detail: 'Waiting for embedded iframe load event...' })
     if (!previewUrl) return
 
     loadSnapshot()
@@ -819,10 +841,25 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
 
     timeoutRef.current = window.setTimeout(() => {
       if (!embeddedLoaded && previewMode === 'embedded') {
-        setStatusMessage('Embedded preview appears blocked or unavailable; switched to Snapshot mode.')
-        setPreviewMode('snapshot')
+        if (snapshotFetchStatus?.ok) {
+          const detail = 'Route is reachable, but iframe did not load. Likely blocked by frame policy (CSP frame-ancestors or X-Frame-Options), mixed-origin cookie policy, or browser sandbox restrictions.'
+          setEmbeddedDiagnostic({ code: 'frame_policy', detail })
+          setStatusMessage(`Embedded diagnostics: ${detail}`)
+          return
+        }
+
+        if (snapshotFetchStatus && !snapshotFetchStatus.ok) {
+          const diagnosed = classifyNetworkIssue(snapshotFetchStatus.error || '')
+          setEmbeddedDiagnostic(diagnosed)
+          setStatusMessage(`Embedded diagnostics: ${diagnosed.detail}`)
+          return
+        }
+
+        const detail = 'Embedded preview did not emit a load event within 15s.'
+        setEmbeddedDiagnostic({ code: 'timeout', detail })
+        setStatusMessage(`Embedded diagnostics: ${detail}`)
       }
-    }, 6000)
+    }, 15000)
 
     return () => {
       if (timeoutRef.current) {
@@ -830,7 +867,7 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
         timeoutRef.current = null
       }
     }
-  }, [previewUrl, refreshToken])
+  }, [previewUrl, refreshToken, previewMode, embeddedLoaded, snapshotFetchStatus])
 
   const handleCaptureToCanvas = async () => {
     if (!onCaptureBlocks) return
@@ -1029,7 +1066,16 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
         <div className="mt-2 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">Route: {route}</p>
           <div className="rounded-md border bg-muted/30 p-0.5">
-            <Button size="sm" variant={previewMode === 'embedded' ? 'default' : 'ghost'} className="h-7" onClick={() => setPreviewMode('embedded')}>
+            <Button
+              size="sm"
+              variant={previewMode === 'embedded' ? 'default' : 'ghost'}
+              className="h-7"
+              onClick={() => {
+                setPreviewMode('embedded')
+                setEmbeddedDiagnostic({ code: 'loading', detail: 'Trying embedded mode...' })
+                setStatusMessage('Embedded diagnostics: trying embedded mode...')
+              }}
+            >
               Embedded
             </Button>
             <Button size="sm" variant={previewMode === 'snapshot' ? 'default' : 'ghost'} className="h-7" onClick={() => setPreviewMode('snapshot')}>
@@ -1037,6 +1083,11 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             </Button>
           </div>
         </div>
+        {embeddedDiagnostic && previewMode === 'embedded' && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Embedded diagnostics ({embeddedDiagnostic.code}): {embeddedDiagnostic.detail}
+          </p>
+        )}
       </div>
 
       <div className="flex-1 min-h-0 overflow-hidden bg-white">
@@ -1052,7 +1103,20 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             className="h-full w-full border-0"
             onLoad={() => {
               setEmbeddedLoaded(true)
+              setEmbeddedDiagnostic({ code: 'loaded', detail: 'Embedded iframe loaded successfully.' })
               setStatusMessage('Embedded preview loaded')
+            }}
+            onError={() => {
+              const diagnosed = snapshotFetchStatus?.ok
+                ? {
+                    code: 'frame_policy' as EmbeddedDiagnosticCode,
+                    detail: 'Route is reachable but iframe failed to load. Likely blocked by frame policy or browser restrictions.'
+                  }
+                : classifyNetworkIssue(snapshotFetchStatus?.error || '')
+
+              setEmbeddedDiagnostic(diagnosed)
+              setStatusMessage(`Embedded diagnostics: ${diagnosed.detail}; switched to Snapshot mode.`)
+              setPreviewMode('snapshot')
             }}
           />
         ) : snapshotDocument ? (
