@@ -121,6 +121,26 @@ declare global {
           className?: string
         }>
       }>
+      captureWireframe: (payload: {
+        url: string
+      }) => Promise<{
+        url: string
+        title: string
+        elements: Array<{
+          id: string
+          tag: string
+          rect: { x: number; y: number; width: number; height: number }
+          text: string
+          className: string
+          children: string[]
+          parentId: string | null
+          level: number
+          isStructural: boolean
+          attributes: { href?: string; src?: string; alt?: string }
+        }>
+        pageWidth: number
+        pageHeight: number
+      }>
     }
     showToast: (message: string, type?: 'success' | 'error' | 'info') => void
   }

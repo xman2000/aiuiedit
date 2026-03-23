@@ -142,13 +142,9 @@ export function Toolbar() {
   }
 
   return (
-    <div className="flex h-14 items-center justify-between border-b bg-card px-4">
-      {/* Left: Logo and Project Info */}
+    <div className="flex h-14 items-center justify-between border-b bg-card px-4 py-2">
+      {/* Left: Project Info */}
       <div className="flex items-center gap-4">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-          CA
-        </div>
-        
         {currentProject && (
           <div className="flex items-center gap-2">
             <span className="font-medium">{currentProject.name}</span>

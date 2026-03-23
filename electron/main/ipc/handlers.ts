@@ -1,4 +1,4 @@
-import { ipcMain, dialog, app, shell } from 'electron'
+import { ipcMain, dialog, app, shell, BrowserWindow } from 'electron'
 import { basename, dirname, join, relative } from 'path'
 import { promises as fs } from 'fs'
 import { homedir } from 'os'
@@ -171,6 +171,36 @@ interface PreviewCaptureResult {
     href?: string
     className?: string
   }>
+}
+
+interface WireframeElement {
+  id: string
+  tag: string
+  rect: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
+  text: string
+  className: string
+  children: string[]
+  parentId: string | null
+  level: number
+  isStructural: boolean
+  attributes: {
+    href?: string
+    src?: string
+    alt?: string
+  }
+}
+
+interface WireframeCaptureResult {
+  url: string
+  title: string
+  elements: WireframeElement[]
+  pageWidth: number
+  pageHeight: number
 }
 
 const TAG_TO_COMPONENT: Record<string, string> = {
@@ -1536,6 +1566,145 @@ export function setupIPC() {
       throw new Error(reason)
     } finally {
       clearTimeout(timeout)
+    }
+  })
+
+  // Wireframe capture - renders HTML in a hidden window and extracts element positions
+  ipcMain.handle('preview:capture-wireframe', async (_event, payload: { url: string }): Promise<WireframeCaptureResult> => {
+    const win = new BrowserWindow({
+      width: 1280,
+      height: 800,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    })
+
+    try {
+      await win.loadURL(payload.url)
+      
+      // Wait for page to settle
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      
+      const result = await win.webContents.executeJavaScript(`
+        (function() {
+          const selector = 'h1,h2,h3,h4,h5,h6,p,li,a,button,span,img,section,article,div,main,aside,nav,header,footer';
+          const elements = Array.from(document.querySelectorAll(selector));
+          const wireframeElements = [];
+          let counter = 0;
+          
+          // Build parent-child relationships
+          const elementMap = new Map();
+          
+          elements.forEach(el => {
+            const rect = el.getBoundingClientRect();
+            const text = (el.textContent || '').trim();
+            const tag = el.tagName.toLowerCase();
+            const className = el.className || '';
+            
+            // Skip invisible or tiny elements
+            if (rect.width < 2 || rect.height < 2) return;
+            if (rect.top < 0 || rect.left < 0) return;
+            
+            counter++;
+            const id = 'wf-' + counter;
+            
+            const isStructural = /^(div|section|article|main|aside|nav|header|footer)$/.test(tag);
+            const hasContent = text.length > 0 || tag === 'img' || tag === 'button' || tag === 'a';
+            
+            // Skip structural divs without content or classes
+            if (isStructural && !hasContent && !className) return;
+            
+            const wfEl = {
+              id,
+              tag,
+              rect: {
+                x: Math.round(rect.left),
+                y: Math.round(rect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height)
+              },
+              text: text.slice(0, 100),
+              className,
+              children: [],
+              parentId: null,
+              level: 0,
+              isStructural,
+              attributes: {
+                href: el.getAttribute('href') || undefined,
+                src: el.getAttribute('src') || undefined,
+                alt: el.getAttribute('alt') || undefined
+              }
+            };
+            
+            elementMap.set(el, wfEl);
+            wireframeElements.push(wfEl);
+          });
+          
+          // Determine parent-child relationships based on DOM hierarchy
+          wireframeElements.forEach(wfEl => {
+            const el = elements.find(e => {
+              const mapEl = elementMap.get(e);
+              return mapEl && mapEl.id === wfEl.id;
+            });
+            
+            if (el) {
+              let parent = el.parentElement;
+              while (parent) {
+                const parentWf = elementMap.get(parent);
+                if (parentWf) {
+                  wfEl.parentId = parentWf.id;
+                  parentWf.children.push(wfEl.id);
+                  break;
+                }
+                parent = parent.parentElement;
+              }
+            }
+          });
+          
+          // Calculate levels
+          wireframeElements.forEach(wfEl => {
+            let level = 0;
+            let current = wfEl;
+            while (current.parentId) {
+              const parent = wireframeElements.find(e => e.id === current.parentId);
+              if (parent) {
+                level++;
+                current = parent;
+              } else {
+                break;
+              }
+            }
+            wfEl.level = level;
+          });
+          
+          const bodyRect = document.body.getBoundingClientRect();
+          const docHeight = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+          
+          return {
+            elements: wireframeElements,
+            pageWidth: Math.round(Math.max(bodyRect.width, 1200)),
+            pageHeight: Math.round(Math.max(docHeight, 800))
+          };
+        })()
+      `)
+      
+      const title = await win.webContents.executeJavaScript(`
+        document.title || 'Rendered Page'
+      `)
+      
+      return {
+        url: payload.url,
+        title,
+        elements: result.elements,
+        pageWidth: result.pageWidth,
+        pageHeight: result.pageHeight
+      }
+    } catch (error: any) {
+      throw new Error('Wireframe capture failed: ' + error.message)
+    } finally {
+      win.destroy()
     }
   })
 

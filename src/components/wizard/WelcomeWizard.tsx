@@ -86,9 +86,6 @@ export function WelcomeWizard() {
       <div className="w-full max-w-2xl rounded-2xl border bg-card p-8 shadow-2xl">
         {/* Header */}
         <div className="mb-8 text-center">
-          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-            <span className="text-3xl font-bold">CA</span>
-          </div>
           <h1 className="mb-2 text-3xl font-bold">Welcome to aiuiedit</h1>
           <p className="text-muted-foreground">
             AI-powered visual UI builder

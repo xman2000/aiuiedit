@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { Eye, EyeOff, Lock, Unlock, Trash2, Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2 } from 'lucide-react'
+import { Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2, RefreshCw, Loader2 } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { useCanvasStore } from '@/store/useCanvasStore'
-import { useProjectStore } from '@/store/useProjectStore'
-import type { CanvasNode, Page } from '@/types'
+import { useAppStore } from '@/store/useAppStore'
+import type { Page } from '@/types'
 
 interface LayoutViewProps {
   currentPage?: Page
@@ -11,14 +11,18 @@ interface LayoutViewProps {
 
 interface WireframeElement {
   id: string
-  nodeId: string | null
   tag: string
-  rect: DOMRect
+  rect: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
   text: string
   className: string
-  children: WireframeElement[]
+  children: string[]
+  parentId: string | null
   level: number
-  visible: boolean
   isStructural: boolean
   attributes: {
     href?: string
@@ -28,16 +32,11 @@ interface WireframeElement {
 }
 
 interface WireframeData {
+  url: string
+  title: string
   elements: WireframeElement[]
   pageWidth: number
   pageHeight: number
-}
-
-function readDimension(value: number | string, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value !== 'string') return fallback
-  const parsed = Number.parseFloat(value.replace('px', ''))
-  return Number.isFinite(parsed) ? parsed : fallback
 }
 
 function getElementLabel(el: WireframeElement): string {
@@ -52,20 +51,16 @@ function getElementLabel(el: WireframeElement): string {
 
 export function LayoutView({ currentPage }: LayoutViewProps) {
   const {
-    nodes,
-    selectNode,
-    deselectAll,
-    updateNode,
-    removeNode,
-    pushHistory
+    deselectAll
   } = useCanvasStore()
-  const { setDirty } = useProjectStore()
+  const { settings } = useAppStore()
 
   const containerRef = useRef<HTMLDivElement>(null)
-  // Wireframe data from actual DOM capture - currently unused but reserved for future integration
-  const [wireframeData] = useState<WireframeData | null>(null)
+  const [wireframeData, setWireframeData] = useState<WireframeData | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [pan, setPan] = useState({ x: 20, y: 20 })
   const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState({ x: 0, y: 0 })
   const [selectedWireframeId, setSelectedWireframeId] = useState<string | null>(null)
@@ -74,100 +69,69 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
   const [showStructure, setShowStructure] = useState(true)
   const [filterTag, setFilterTag] = useState<string>('all')
 
-  // Get page nodes
-  const pageNodes = useMemo(() => {
-    if (!currentPage) return []
-    return Array.from(nodes.values())
-      .filter((node) => node.pageId === currentPage.id)
-      .sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x))
-  }, [nodes, currentPage])
+  // Get the preview URL from settings and current page route
+  const previewUrl = useMemo(() => {
+    const baseUrl = settings.livePreviewBaseUrl || 'http://127.0.0.1:8000'
+    const route = currentPage?.route || '/'
+    if (!route.startsWith('/')) return ''
+    return `${baseUrl.replace(/\/$/, '')}${route}`
+  }, [settings.livePreviewBaseUrl, currentPage?.route])
 
-  // Build wireframe from nodes (fallback to node positions)
-  const computedWireframe = useMemo<WireframeData | null>(() => {
-    if (!currentPage) return null
+  // Capture wireframe from rendered page
+  const captureWireframe = useCallback(async () => {
+    if (!previewUrl) {
+      setError('No preview URL configured')
+      return
+    }
 
-    const elements: WireframeElement[] = []
-    const childrenByParent = new Map<string | null, CanvasNode[]>()
+    setIsLoading(true)
+    setError(null)
 
-    pageNodes.forEach((node) => {
-      const parentId = node.parentId || null
-      const siblings = childrenByParent.get(parentId) || []
-      siblings.push(node)
-      childrenByParent.set(parentId, siblings)
-    })
+    try {
+      const result = await window.electron.captureWireframe({ url: previewUrl })
+      setWireframeData(result)
+    } catch (err: any) {
+      setError(err.message || 'Failed to capture wireframe')
+      console.error('Wireframe capture failed:', err)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [previewUrl])
 
-    const buildHierarchy = (node: CanvasNode, level: number): WireframeElement => {
-      const width = readDimension(node.size.width, 200)
-      const height = readDimension(node.size.height, 50)
-      const children = childrenByParent.get(node.id) || []
+  // Capture on mount and when URL changes
+  useEffect(() => {
+    if (previewUrl) {
+      captureWireframe()
+    }
+  }, [previewUrl, captureWireframe])
 
-      const props = (node.props || {}) as Record<string, any>
-
-      return {
-        id: `wf-${node.id}`,
-        nodeId: node.id,
-        tag: node.type,
-        rect: {
-          x: node.position.x,
-          y: node.position.y,
-          width,
-          height,
-          top: node.position.y,
-          left: node.position.x,
-          right: node.position.x + width,
-          bottom: node.position.y + height,
-          toJSON: () => ({})
-        } as DOMRect,
-        text: props.text || props.content || props.label || props.title || props.alt || '',
-        className: '',
-        children: children.map((child) => buildHierarchy(child, level + 1)),
-        level,
-        visible: node.visible,
-        isStructural: ['container', 'card', 'section', 'div'].includes(node.type),
-        attributes: {
-          href: props.href,
-          src: props.src,
-          alt: props.alt
-        }
+  // Build hierarchical tree from flat elements
+  const hierarchicalElements = useMemo(() => {
+    if (!wireframeData) return []
+    
+    const rootElements: WireframeElement[] = []
+    
+    wireframeData.elements.forEach(el => {
+      if (!el.parentId) {
+        rootElements.push(el)
       }
-    }
-
-    const rootNodes = childrenByParent.get(null) || []
-    rootNodes.forEach((node) => {
-      elements.push(buildHierarchy(node, 0))
     })
-
-    // Calculate page bounds
-    let maxX = 800
-    let maxY = 600
-    elements.forEach((el) => {
-      maxX = Math.max(maxX, el.rect.right + 100)
-      maxY = Math.max(maxY, el.rect.bottom + 100)
+    
+    // Sort by position (top to bottom, left to right)
+    rootElements.sort((a, b) => {
+      if (Math.abs(a.rect.y - b.rect.y) < 50) {
+        return a.rect.x - b.rect.x
+      }
+      return a.rect.y - b.rect.y
     })
+    
+    return rootElements
+  }, [wireframeData])
 
-    return {
-      elements,
-      pageWidth: maxX,
-      pageHeight: maxY
-    }
-  }, [pageNodes, currentPage])
-
-  // Flatten wireframe elements for rendering
-  const flattenElements = useCallback((elements: WireframeElement[]): WireframeElement[] => {
-    const flat: WireframeElement[] = []
-    const traverse = (el: WireframeElement) => {
-      flat.push(el)
-      el.children.forEach(traverse)
-    }
-    elements.forEach(traverse)
-    return flat
-  }, [])
-
+  // Flatten for rendering
   const allElements = useMemo(() => {
-    const data = wireframeData || computedWireframe
-    if (!data) return []
-    return flattenElements(data.elements)
-  }, [wireframeData, computedWireframe, flattenElements])
+    return wireframeData?.elements || []
+  }, [wireframeData])
 
   const filteredElements = useMemo(() => {
     if (filterTag === 'all') return allElements
@@ -179,11 +143,6 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
   const selectedElement = useMemo(() => {
     return allElements.find((el) => el.id === selectedWireframeId) || null
   }, [allElements, selectedWireframeId])
-
-  const linkedNode = useMemo(() => {
-    if (!selectedElement?.nodeId) return null
-    return nodes.get(selectedElement.nodeId) || null
-  }, [selectedElement, nodes])
 
   // Mouse handlers for panning
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -215,42 +174,8 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
     }
   }
 
-  const selectElement = (id: string, addToSelection = false) => {
-    const element = allElements.find((el) => el.id === id)
-    if (!element) return
-
+  const selectElement = (id: string) => {
     setSelectedWireframeId(id)
-
-    // Also select the corresponding node if it exists
-    if (element.nodeId) {
-      if (addToSelection) {
-        // For multi-select, we'd need to modify the store
-        selectNode(element.nodeId, true)
-      } else {
-        selectNode(element.nodeId, false)
-      }
-    }
-  }
-
-  const deleteSelected = () => {
-    if (!linkedNode) return
-    removeNode(linkedNode.id)
-    setDirty(true)
-    setSelectedWireframeId(null)
-  }
-
-  const toggleVisibility = () => {
-    if (!linkedNode) return
-    updateNode(linkedNode.id, { visible: !linkedNode.visible })
-    pushHistory()
-    setDirty(true)
-  }
-
-  const toggleLock = () => {
-    if (!linkedNode) return
-    updateNode(linkedNode.id, { locked: !linkedNode.locked })
-    pushHistory()
-    setDirty(true)
   }
 
   // Keyboard shortcuts
@@ -261,37 +186,29 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
         return
       }
 
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedWireframeId) {
-        e.preventDefault()
-        deleteSelected()
-      }
-
       if (e.key === 'Escape') {
         setSelectedWireframeId(null)
         deselectAll()
-      }
-
-      const step = e.shiftKey ? 10 : 1
-      if (linkedNode && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
-        e.preventDefault()
-        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
-        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
-        updateNode(linkedNode.id, {
-          position: {
-            x: linkedNode.position.x + dx,
-            y: linkedNode.position.y + dy
-          }
-        })
-        pushHistory()
-        setDirty(true)
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedWireframeId, linkedNode, updateNode, pushHistory, setDirty, deselectAll])
+  }, [deselectAll])
 
-  const data = wireframeData || computedWireframe
+  if (!previewUrl) {
+    return (
+      <div className="flex h-full items-center justify-center p-8">
+        <div className="text-center">
+          <Layout className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+          <p className="text-muted-foreground">No preview URL configured</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Set a Live Preview Base URL in Settings to capture the wireframe
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[280px_1fr_320px]">
@@ -303,18 +220,26 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">DOM Structure</span>
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Hierarchical view of page elements
+            {wireframeData ? `${wireframeData.elements.length} elements captured` : 'Capture to see structure'}
           </p>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto p-2">
-          {data?.elements.length === 0 ? (
+          {isLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
             <div className="rounded border border-dashed p-4 text-center">
-              <p className="text-xs text-muted-foreground">No elements on this page</p>
+              <p className="text-xs text-destructive">{error}</p>
+            </div>
+          ) : hierarchicalElements.length === 0 ? (
+            <div className="rounded border border-dashed p-4 text-center">
+              <p className="text-xs text-muted-foreground">No elements captured</p>
             </div>
           ) : (
             <ElementTree
-              elements={data?.elements || []}
+              elements={hierarchicalElements}
               selectedId={selectedWireframeId}
               hoveredId={hoveredWireframeId}
               onSelect={selectElement}
@@ -359,6 +284,19 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={captureWireframe}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 h-4 w-4" />
+              )}
+              Refresh
+            </Button>
             <select
               value={filterTag}
               onChange={(e) => setFilterTag(e.target.value)}
@@ -372,7 +310,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
               <option value="image">Images</option>
               <option value="button">Buttons</option>
               <option value="link">Links</option>
-              <option value="container">Containers</option>
+              <option value="div">Divs</option>
             </select>
           </div>
         </div>
@@ -393,49 +331,69 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
             }
           }}
         >
-          <div
-            className="relative origin-top-left"
-            style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              width: data?.pageWidth || 800,
-              height: data?.pageHeight || 600
-            }}
-          >
-            {/* Page background */}
+          {isLoading ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="text-center">
+                <Loader2 className="mx-auto mb-4 h-12 w-12 animate-spin text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Capturing wireframe...</p>
+                <p className="text-xs text-muted-foreground">{previewUrl}</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex h-full items-center justify-center p-8">
+              <div className="text-center">
+                <p className="text-destructive">{error}</p>
+                <Button variant="outline" size="sm" onClick={captureWireframe} className="mt-4">
+                  <RefreshCw className="mr-1 h-4 w-4" />
+                  Retry
+                </Button>
+              </div>
+            </div>
+          ) : wireframeData ? (
             <div
-              className="absolute bg-background shadow-lg"
+              className="relative origin-top-left"
               style={{
-                width: data?.pageWidth || 800,
-                height: data?.pageHeight || 600
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                width: wireframeData.pageWidth,
+                height: wireframeData.pageHeight
               }}
             >
-              {/* Grid pattern */}
+              {/* Page background */}
               <div
-                className="absolute inset-0 opacity-30"
+                className="absolute bg-background shadow-lg"
                 style={{
-                  backgroundImage: `
-                    linear-gradient(to right, #e5e7eb 1px, transparent 1px),
-                    linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
-                  `,
-                  backgroundSize: '20px 20px'
+                  width: wireframeData.pageWidth,
+                  height: wireframeData.pageHeight
                 }}
-              />
-
-              {/* Render elements */}
-              {filteredElements.map((element) => (
-                <WireframeBox
-                  key={element.id}
-                  element={element}
-                  isSelected={selectedWireframeId === element.id}
-                  isHovered={hoveredWireframeId === element.id}
-                  showLabel={showLabels}
-                  showStructure={showStructure}
-                  onSelect={(add) => selectElement(element.id, add)}
-                  onHover={setHoveredWireframeId}
+              >
+                {/* Grid pattern */}
+                <div
+                  className="absolute inset-0 opacity-30"
+                  style={{
+                    backgroundImage: `
+                      linear-gradient(to right, #e5e7eb 1px, transparent 1px),
+                      linear-gradient(to bottom, #e5e7eb 1px, transparent 1px)
+                    `,
+                    backgroundSize: '20px 20px'
+                  }}
                 />
-              ))}
+
+                {/* Render elements */}
+                {filteredElements.map((element) => (
+                  <WireframeBox
+                    key={element.id}
+                    element={element}
+                    isSelected={selectedWireframeId === element.id}
+                    isHovered={hoveredWireframeId === element.id}
+                    showLabel={showLabels}
+                    showStructure={showStructure}
+                    onSelect={() => selectElement(element.id)}
+                    onHover={setHoveredWireframeId}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
 
         {/* Zoom controls */}
@@ -507,63 +465,35 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                 </div>
               </div>
 
-              {/* Linked node controls */}
-              {linkedNode && (
-                <>
-                  <div className="h-px bg-border" />
-                  
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Element Controls</label>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={toggleVisibility}
-                        className="flex-1"
-                      >
-                        {linkedNode.visible ? <Eye className="mr-1 h-3 w-3" /> : <EyeOff className="mr-1 h-3 w-3" />}
-                        {linkedNode.visible ? 'Hide' : 'Show'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={toggleLock}
-                        className="flex-1"
-                      >
-                        {linkedNode.locked ? <Lock className="mr-1 h-3 w-3" /> : <Unlock className="mr-1 h-3 w-3" />}
-                        {linkedNode.locked ? 'Unlock' : 'Lock'}
-                      </Button>
-                    </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={deleteSelected}
-                      className="w-full"
-                    >
-                      <Trash2 className="mr-1 h-3 w-3" />
-                      Delete Element
-                    </Button>
-                  </div>
-
-                  {/* Node ID */}
-                  <div className="rounded-md border bg-muted/30 p-2">
-                    <span className="text-[10px] text-muted-foreground">Node ID</span>
-                    <p className="font-mono text-[10px]">{linkedNode.id}</p>
-                  </div>
-                </>
-              )}
-
               {/* Class info */}
               {selectedElement.className && (
                 <div className="space-y-1">
                   <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Classes</label>
                   <div className="flex flex-wrap gap-1">
-                    {selectedElement.className.split(/\s+/).filter(Boolean).map((cls) => (
+                    {selectedElement.className.split(/\s+/).filter(Boolean).slice(0, 10).map((cls) => (
                       <span key={cls} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">
                         {cls}
                       </span>
                     ))}
+                    {selectedElement.className.split(/\s+/).filter(Boolean).length > 10 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        +{selectedElement.className.split(/\s+/).filter(Boolean).length - 10} more
+                      </span>
+                    )}
                   </div>
+                </div>
+              )}
+
+              {/* Attributes */}
+              {(selectedElement.attributes.href || selectedElement.attributes.src) && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Attributes</label>
+                  {selectedElement.attributes.href && (
+                    <p className="text-[10px] text-muted-foreground truncate">href: {selectedElement.attributes.href}</p>
+                  )}
+                  {selectedElement.attributes.src && (
+                    <p className="text-[10px] text-muted-foreground truncate">src: {selectedElement.attributes.src}</p>
+                  )}
                 </div>
               )}
             </div>
@@ -571,7 +501,11 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
             <div className="flex h-full flex-col items-center justify-center text-center">
               <Layout className="mb-2 h-8 w-8 text-muted-foreground/50" />
               <p className="text-xs text-muted-foreground">Select an element on the wireframe to view its properties</p>
-              <p className="mt-1 text-[10px] text-muted-foreground">Use arrow keys to nudge position</p>
+              {wireframeData && (
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  {wireframeData.elements.length} elements captured from<br />{wireframeData.url}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -579,7 +513,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
         {/* Stats footer */}
         <div className="border-t p-3">
           <p className="text-[10px] text-muted-foreground">
-            {allElements.length} elements · {filteredElements.length} visible
+            {wireframeData ? `${wireframeData.elements.length} elements · Page: ${wireframeData.title}` : 'No wireframe captured'}
           </p>
           <p className="text-[10px] text-muted-foreground">
             Drag to pan · Scroll+Ctrl to zoom · Click to select
@@ -597,13 +531,13 @@ interface WireframeBoxProps {
   isHovered: boolean
   showLabel: boolean
   showStructure: boolean
-  onSelect: (addToSelection: boolean) => void
+  onSelect: () => void
   onHover: (id: string | null) => void
 }
 
 function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure, onSelect, onHover }: WireframeBoxProps) {
   const getBorderColor = () => {
-    if (isSelected) return '#2563eb' // primary
+    if (isSelected) return '#2563eb'
     if (isHovered) return '#3b82f6'
     if (element.isStructural) return '#94a3b8'
     return '#cbd5e1'
@@ -618,7 +552,7 @@ function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    onSelect(e.metaKey || e.ctrlKey)
+    onSelect()
   }
 
   return (
@@ -637,12 +571,10 @@ function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure
       onMouseEnter={() => onHover(element.id)}
       onMouseLeave={() => onHover(null)}
     >
-      {/* Selection indicator */}
       {isSelected && (
         <div className="pointer-events-none absolute -inset-[2px] border-2 border-primary" />
       )}
 
-      {/* Label */}
       {showLabel && (element.rect.height > 20 || isSelected || isHovered) && (
         <div
           className="absolute left-0 top-0 z-10 flex max-w-full items-center gap-1 truncate rounded-br bg-background/90 px-1.5 py-0.5 text-[10px] font-medium shadow-sm"
@@ -653,7 +585,6 @@ function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure
         </div>
       )}
 
-      {/* Resize handles for selected element */}
       {isSelected && (
         <>
           <div className="absolute -left-1 -top-1 h-2 w-2 rounded-full bg-primary" />
@@ -671,7 +602,7 @@ interface ElementTreeProps {
   elements: WireframeElement[]
   selectedId: string | null
   hoveredId: string | null
-  onSelect: (id: string, addToSelection: boolean) => void
+  onSelect: (id: string) => void
   onHover: (id: string | null) => void
 }
 
@@ -687,6 +618,7 @@ function ElementTree({ elements, selectedId, hoveredId, onSelect, onHover }: Ele
           onSelect={onSelect}
           onHover={onHover}
           depth={0}
+          allElements={elements}
         />
       ))}
     </div>
@@ -697,20 +629,27 @@ interface TreeNodeProps {
   element: WireframeElement
   selectedId: string | null
   hoveredId: string | null
-  onSelect: (id: string, addToSelection: boolean) => void
+  onSelect: (id: string) => void
   onHover: (id: string | null) => void
   depth: number
+  allElements: WireframeElement[]
 }
 
-function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth }: TreeNodeProps) {
+function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth, allElements }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(true)
-  const hasChildren = element.children.length > 0
+  
+  // Find children from all elements
+  const childElements = useMemo(() => {
+    return allElements.filter(el => el.parentId === element.id)
+  }, [element.id, allElements])
+  
+  const hasChildren = childElements.length > 0
   const isSelected = selectedId === element.id
   const isHovered = hoveredId === element.id
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
-    onSelect(element.id, e.metaKey || e.ctrlKey)
+    onSelect(element.id)
   }
 
   return (
@@ -743,12 +682,11 @@ function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth }: 
         )}
         <TagIcon tag={element.tag} className="h-3 w-3 shrink-0 opacity-70" />
         <span className="truncate">{getElementLabel(element)}</span>
-        {!element.visible && <EyeOff className="ml-auto h-3 w-3 shrink-0 opacity-50" />}
       </div>
 
       {hasChildren && isExpanded && (
         <div>
-          {element.children.map((child) => (
+          {childElements.map((child) => (
             <TreeNode
               key={child.id}
               element={child}
@@ -757,6 +695,7 @@ function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth }: 
               onSelect={onSelect}
               onHover={onHover}
               depth={depth + 1}
+              allElements={allElements}
             />
           ))}
         </div>
