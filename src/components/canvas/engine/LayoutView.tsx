@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2, RefreshCw, Loader2, Move, Target, Palette, Search, Smartphone, Monitor, Tablet } from 'lucide-react'
+import { Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2, RefreshCw, Loader2, Move, Target, Palette, Search, Smartphone, Monitor, Tablet, Copy, Trash2, Focus, Undo2, Redo2, Scissors, AlignCenter, Maximize } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { useAppStore } from '@/store/useAppStore'
@@ -99,6 +99,16 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
   const [resizeStart, setResizeStart] = useState({ width: 0, height: 0 })
   const [editingElementId, setEditingElementId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
+  
+  // New features state
+  const [, setClipboard] = useState<WireframeElement | null>(null)
+  const [focusMode, setFocusMode] = useState(false)
+  const [showDimensions, setShowDimensions] = useState(true)
+  const [showAlignmentGuides, setShowAlignmentGuides] = useState(true)
+  const [alignmentGuides, setAlignmentGuides] = useState<{ x: number[]; y: number[] }>({ x: [], y: [] })
+  const [undoStack, setUndoStack] = useState<Map<string, ElementModification>[]>([])
+  const [redoStack, setRedoStack] = useState<Map<string, ElementModification>[]>([])
+  const [hiddenElementIds, setHiddenElementIds] = useState<Set<string>>(new Set())
 
   // Get the preview URL from settings and current page route
   const previewUrl = useMemo(() => {
@@ -179,6 +189,133 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
     return descendants
   }, [wireframeData])
 
+  // Undo functionality
+  const undo = useCallback(() => {
+    if (undoStack.length === 0) return
+    
+    const previousState = undoStack[undoStack.length - 1]
+    setRedoStack(prev => [...prev, new Map(modifiedElements)])
+    setModifiedElements(new Map(previousState))
+    setUndoStack(prev => prev.slice(0, -1))
+  }, [undoStack, modifiedElements])
+
+  // Redo functionality
+  const redo = useCallback(() => {
+    if (redoStack.length === 0) return
+    
+    const nextState = redoStack[redoStack.length - 1]
+    setUndoStack(prev => [...prev, new Map(modifiedElements)])
+    setModifiedElements(new Map(nextState))
+    setRedoStack(prev => prev.slice(0, -1))
+  }, [redoStack, modifiedElements])
+
+  // Push to undo stack before making changes
+  const pushUndoState = useCallback(() => {
+    setUndoStack(prev => [...prev, new Map(modifiedElements)])
+    setRedoStack([]) // Clear redo stack on new action
+  }, [modifiedElements])
+
+  // Copy element
+  const copyElement = useCallback(() => {
+    if (selectedWireframeIds.size !== 1) return
+    const elementId = Array.from(selectedWireframeIds)[0]
+    const element = wireframeData?.elements.find(el => el.id === elementId)
+    if (element) {
+      setClipboard(element)
+      window.showToast?.('Element copied', 'success')
+    }
+  }, [selectedWireframeIds, wireframeData])
+
+  // Duplicate element
+  const duplicateElement = useCallback(() => {
+    if (selectedWireframeIds.size !== 1) return
+    pushUndoState()
+    
+    const elementId = Array.from(selectedWireframeIds)[0]
+    const element = wireframeData?.elements.find(el => el.id === elementId)
+    if (!element) return
+
+    const pos = getElementPosition(element)
+    const newId = `wf-${Date.now()}`
+    
+    // Add offset to avoid overlap
+    setModifiedElements(prev => {
+      const next = new Map(prev)
+      next.set(newId, {
+        x: pos.x + 20,
+        y: pos.y + 20,
+        width: element.rect.width,
+        height: element.rect.height
+      })
+      return next
+    })
+    
+    setSelectedWireframeIds(new Set([newId]))
+    window.showToast?.('Element duplicated', 'success')
+  }, [selectedWireframeIds, wireframeData, getElementPosition, pushUndoState])
+
+  // Delete elements
+  const deleteElements = useCallback(() => {
+    if (selectedWireframeIds.size === 0) return
+    pushUndoState()
+    
+    setHiddenElementIds(prev => {
+      const next = new Set(prev)
+      selectedWireframeIds.forEach(id => next.add(id))
+      return next
+    })
+    setSelectedWireframeIds(new Set())
+    window.showToast?.(`${selectedWireframeIds.size} element(s) hidden`, 'success')
+  }, [selectedWireframeIds, pushUndoState])
+
+
+
+  // Calculate alignment guides
+  const calculateAlignmentGuides = useCallback((activeElement: WireframeElement | null) => {
+    if (!activeElement || !showAlignmentGuides) {
+      setAlignmentGuides({ x: [], y: [] })
+      return
+    }
+
+    const pos = getElementPosition(activeElement)
+    const size = getElementSize(activeElement)
+    const activeLeft = pos.x
+    const activeRight = pos.x + size.width
+    const activeCenterX = pos.x + size.width / 2
+    const activeTop = pos.y
+    const activeBottom = pos.y + size.height
+    const activeCenterY = pos.y + size.height / 2
+
+    const xGuides: number[] = []
+    const yGuides: number[] = []
+    const threshold = 5 // pixels
+
+    wireframeData?.elements.forEach(el => {
+      if (el.id === activeElement.id) return
+      
+      const elPos = getElementPosition(el)
+      const elSize = getElementSize(el)
+      const elLeft = elPos.x
+      const elRight = elPos.x + elSize.width
+      const elCenterX = elPos.x + elSize.width / 2
+      const elTop = elPos.y
+      const elBottom = elPos.y + elSize.height
+      const elCenterY = elPos.y + elSize.height / 2
+
+      // Check horizontal alignments
+      if (Math.abs(activeLeft - elLeft) < threshold) xGuides.push(elLeft)
+      if (Math.abs(activeCenterX - elCenterX) < threshold) xGuides.push(elCenterX)
+      if (Math.abs(activeRight - elRight) < threshold) xGuides.push(elRight)
+
+      // Check vertical alignments
+      if (Math.abs(activeTop - elTop) < threshold) yGuides.push(elTop)
+      if (Math.abs(activeCenterY - elCenterY) < threshold) yGuides.push(elCenterY)
+      if (Math.abs(activeBottom - elBottom) < threshold) yGuides.push(elBottom)
+    })
+
+    setAlignmentGuides({ x: [...new Set(xGuides)], y: [...new Set(yGuides)] })
+  }, [wireframeData, getElementPosition, getElementSize, showAlignmentGuides])
+
   // Handle element click with multi-select support
   const handleElementClick = (e: React.MouseEvent, elementId: string) => {
     e.stopPropagation()
@@ -250,7 +387,13 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
 
     setIsDragging(true)
     
-    setDragStart({ x: e.clientX, y: e.clientY })
+      setDragStart({ x: e.clientX, y: e.clientY })
+      
+      // Calculate alignment guides for the dragged element
+      const primaryElement = wireframeData?.elements.find(el => el.id === elementId)
+      if (primaryElement) {
+        calculateAlignmentGuides(primaryElement)
+      }
   }
 
   // Handle resize start
@@ -362,6 +505,19 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
   const filteredElements = useMemo(() => {
     let filtered = [...allElements]
     
+    // Filter out hidden elements
+    filtered = filtered.filter(el => !hiddenElementIds.has(el.id))
+    
+    // Focus mode - only show selected elements and their children
+    if (focusMode && selectedWireframeIds.size > 0) {
+      const visibleIds = new Set<string>()
+      selectedWireframeIds.forEach(id => {
+        visibleIds.add(id)
+        getDescendantIds(id).forEach(descId => visibleIds.add(descId))
+      })
+      filtered = filtered.filter(el => visibleIds.has(el.id))
+    }
+    
     // Apply tag filter
     if (filterTag === 'structural') filtered = filtered.filter((el) => el.isStructural)
     else if (filterTag === 'content') filtered = filtered.filter((el) => !el.isStructural)
@@ -379,7 +535,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
     
     // Sort by level so children render on top
     return filtered.sort((a, b) => a.level - b.level)
-  }, [allElements, filterTag, searchQuery])
+  }, [allElements, filterTag, searchQuery, hiddenElementIds, focusMode, selectedWireframeIds, getDescendantIds])
 
   const selectedElements = useMemo(() => {
     return Array.from(selectedWireframeIds).map(id => allElements.find(el => el.id === id)).filter(Boolean) as WireframeElement[]
@@ -452,6 +608,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
       // Arrow keys to nudge selected elements
       if (selectedWireframeIds.size > 0 && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key) && !editingElementId) {
         e.preventDefault()
+        pushUndoState()
         const step = e.shiftKey ? 10 : 1
         const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
         const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
@@ -474,11 +631,59 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
           return next
         })
       }
+
+      // Copy - Cmd/Ctrl+C
+      if ((e.metaKey || e.ctrlKey) && e.key === 'c' && selectedWireframeIds.size === 1 && !editingElementId) {
+        e.preventDefault()
+        copyElement()
+      }
+
+      // Duplicate - Cmd/Ctrl+D
+      if ((e.metaKey || e.ctrlKey) && e.key === 'd' && selectedWireframeIds.size === 1 && !editingElementId) {
+        e.preventDefault()
+        duplicateElement()
+      }
+
+      // Delete - Delete or Backspace
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedWireframeIds.size > 0 && !editingElementId) {
+        e.preventDefault()
+        deleteElements()
+      }
+
+      // Undo - Cmd/Ctrl+Z
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey && !editingElementId) {
+        e.preventDefault()
+        undo()
+      }
+
+      // Redo - Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y
+      if ((e.metaKey || e.ctrlKey) && ((e.key === 'z' && e.shiftKey) || e.key === 'y') && !editingElementId) {
+        e.preventDefault()
+        redo()
+      }
+
+      // Focus mode - F
+      if (e.key === 'f' && !editingElementId && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setFocusMode(prev => !prev)
+      }
+
+      // Toggle dimensions - D
+      if (e.key === 'd' && !editingElementId && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowDimensions(prev => !prev)
+      }
+
+      // Toggle alignment guides - G
+      if (e.key === 'g' && !editingElementId && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault()
+        setShowAlignmentGuides(prev => !prev)
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedWireframeIds, deselectAll, wireframeData, editingElementId])
+  }, [selectedWireframeIds, deselectAll, wireframeData, editingElementId, undo, redo, copyElement, duplicateElement, deleteElements, pushUndoState])
 
   // Get viewport dimensions
   const viewportDimensions = useMemo(() => {
@@ -580,6 +785,36 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
             <Button variant={showLabels ? 'default' : 'ghost'} size="sm" className="h-8" onClick={() => setShowLabels(!showLabels)}>Labels</Button>
             <Button variant={showStructure ? 'default' : 'ghost'} size="sm" className="h-8" onClick={() => setShowStructure(!showStructure)}>Structure</Button>
             <Button variant={showSpacing ? 'default' : 'ghost'} size="sm" className="h-8" onClick={() => setShowSpacing(!showSpacing)}>Spacing</Button>
+            
+            <Button 
+              variant={showAlignmentGuides ? 'default' : 'ghost'} 
+              size="sm" 
+              className="h-8" 
+              onClick={() => setShowAlignmentGuides(!showAlignmentGuides)}
+              title="Alignment guides (G)"
+            >
+              <AlignCenter className="h-4 w-4 mr-1" /> Guides
+            </Button>
+
+            <Button 
+              variant={showDimensions ? 'default' : 'ghost'} 
+              size="sm" 
+              className="h-8" 
+              onClick={() => setShowDimensions(!showDimensions)}
+              title="Show dimensions (D)"
+            >
+              <Maximize className="h-4 w-4 mr-1" /> Size
+            </Button>
+
+            <Button 
+              variant={focusMode ? 'default' : 'ghost'} 
+              size="sm" 
+              className="h-8" 
+              onClick={() => setFocusMode(!focusMode)}
+              title="Focus mode (F)"
+            >
+              <Focus className="h-4 w-4 mr-1" /> Focus
+            </Button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -688,6 +923,11 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                   }}
                 />
 
+                {/* Alignment Guides */}
+                {showAlignmentGuides && (
+                  <AlignmentGuides guides={alignmentGuides} pageWidth={viewportDimensions.width} pageHeight={wireframeData.pageHeight} />
+                )}
+
                 {/* Render elements */}
                 {filteredElements.map((element) => {
                   const pos = getElementPosition(element)
@@ -708,6 +948,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                       showLabel={showLabels}
                       showStructure={showStructure}
                       showSpacing={showSpacing}
+                      showDimensions={showDimensions}
                       onSelect={(e) => handleElementClick(e, element.id)}
                       onHover={handleElementHover}
                       onDoubleClick={(e) => handleElementDoubleClick(e, element.id)}
@@ -790,6 +1031,28 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                         <span className="text-[10px] text-muted-foreground">Height</span>
                         <p className="font-mono text-sm">{Math.round(getElementSize(selectedElement).height)}px</p>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Actions</label>
+                    <div className="flex flex-wrap gap-1">
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={copyElement} disabled={selectedWireframeIds.size !== 1}>
+                        <Copy className="h-3 w-3 mr-1" /> Copy
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={duplicateElement} disabled={selectedWireframeIds.size !== 1}>
+                        <Scissors className="h-3 w-3 mr-1" /> Dup
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={deleteElements} disabled={selectedWireframeIds.size === 0}>
+                        <Trash2 className="h-3 w-3 mr-1" /> Hide
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={undo} disabled={undoStack.length === 0}>
+                        <Undo2 className="h-3 w-3 mr-1" /> Undo
+                      </Button>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={redo} disabled={redoStack.length === 0}>
+                        <Redo2 className="h-3 w-3 mr-1" /> Redo
+                      </Button>
                     </div>
                   </div>
 
@@ -892,6 +1155,7 @@ interface WireframeBoxProps {
   showLabel: boolean
   showStructure: boolean
   showSpacing: boolean
+  showDimensions: boolean
   onSelect: (e: React.MouseEvent) => void
   onHover: (id: string | null) => void
   onDoubleClick: (e: React.MouseEvent) => void
@@ -906,7 +1170,7 @@ interface WireframeBoxProps {
 
 function WireframeBox({ 
   element, position, size, text, isSelected, isHovered, isHighlighted,
-  showLabel, showStructure, showSpacing, onSelect, onHover, onDoubleClick,
+  showLabel, showStructure, showSpacing, showDimensions, onSelect, onHover, onDoubleClick,
   onMouseDown, onResizeStart, isEditing, editText, onEditChange, onEditSave, onEditCancel
 }: WireframeBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -1148,6 +1412,13 @@ function WireframeBox({
           <span className="truncate">{getElementLabel(element)}</span>
         </div>
       )}
+
+      {/* Dimensions tooltip */}
+      {isHovered && showDimensions && !isEditing && (
+        <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 bg-black text-white text-[10px] px-1.5 py-0.5 rounded pointer-events-none whitespace-nowrap">
+          {Math.round(size.width)} × {Math.round(size.height)}
+        </div>
+      )}
     </div>
   )
 }
@@ -1269,6 +1540,50 @@ function TreeNode({ element, allElements, selectedIds, hoveredId, highlightedIds
         </div>
       )}
     </div>
+  )
+}
+
+// Alignment Guides Component
+function AlignmentGuides({ 
+  guides, 
+  pageWidth, 
+  pageHeight 
+}: { 
+  guides: { x: number[]; y: number[] }
+  pageWidth: number
+  pageHeight: number
+}) {
+  return (
+    <>
+      {guides.x.map((x, i) => (
+        <div
+          key={`x-${i}`}
+          className="absolute pointer-events-none"
+          style={{
+            left: x,
+            top: 0,
+            width: 1,
+            height: pageHeight,
+            backgroundColor: '#ef4444',
+            zIndex: 1000
+          }}
+        />
+      ))}
+      {guides.y.map((y, i) => (
+        <div
+          key={`y-${i}`}
+          className="absolute pointer-events-none"
+          style={{
+            left: 0,
+            top: y,
+            width: pageWidth,
+            height: 1,
+            backgroundColor: '#ef4444',
+            zIndex: 1000
+          }}
+        />
+      ))}
+    </>
   )
 }
 
