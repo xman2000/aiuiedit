@@ -40,7 +40,8 @@ const electronAPI = {
   applyRenderedElementDelete: (payload) => ipcRenderer.invoke('source:apply-rendered-element-delete', payload),
 
   // Preview
-  capturePreviewRoute: (payload) => ipcRenderer.invoke('preview:capture-route', payload)
+  capturePreviewRoute: (payload) => ipcRenderer.invoke('preview:capture-route', payload),
+  captureWireframe: (payload) => ipcRenderer.invoke('preview:capture-wireframe', payload)
 }
 
 // Expose API to window
