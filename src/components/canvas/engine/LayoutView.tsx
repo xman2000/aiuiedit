@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2, RefreshCw, Loader2 } from 'lucide-react'
+import { Type, Heading1, Image as ImageIcon, Link2, MousePointer, Square, Layout, Layers, Maximize2, RefreshCw, Loader2, Move, Target } from 'lucide-react'
 import { Button } from '@/components/common/Button'
 import { useCanvasStore } from '@/store/useCanvasStore'
 import { useAppStore } from '@/store/useAppStore'
@@ -57,6 +57,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
 
   const containerRef = useRef<HTMLDivElement>(null)
   const [wireframeData, setWireframeData] = useState<WireframeData | null>(null)
+  const [modifiedElements, setModifiedElements] = useState<Map<string, { x: number; y: number }>>(new Map())
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [zoom, setZoom] = useState(1)
@@ -68,6 +69,9 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
   const [showLabels, setShowLabels] = useState(true)
   const [showStructure, setShowStructure] = useState(true)
   const [filterTag, setFilterTag] = useState<string>('all')
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
 
   // Get the preview URL from settings and current page route
   const previewUrl = useMemo(() => {
@@ -86,6 +90,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
 
     setIsLoading(true)
     setError(null)
+    setModifiedElements(new Map())
 
     try {
       const result = await window.electron.captureWireframe({ url: previewUrl })
@@ -105,30 +110,60 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
     }
   }, [previewUrl, captureWireframe])
 
-  // Build hierarchical tree from flat elements
-  const hierarchicalElements = useMemo(() => {
-    if (!wireframeData) return []
-    
-    const rootElements: WireframeElement[] = []
-    
-    wireframeData.elements.forEach(el => {
-      if (!el.parentId) {
-        rootElements.push(el)
-      }
-    })
-    
-    // Sort by position (top to bottom, left to right)
-    rootElements.sort((a, b) => {
-      if (Math.abs(a.rect.y - b.rect.y) < 50) {
-        return a.rect.x - b.rect.x
-      }
-      return a.rect.y - b.rect.y
-    })
-    
-    return rootElements
-  }, [wireframeData])
+  // Get effective position (original + modifications)
+  const getElementPosition = useCallback((element: WireframeElement) => {
+    const mod = modifiedElements.get(element.id)
+    if (mod) {
+      return { x: mod.x, y: mod.y }
+    }
+    return { x: element.rect.x, y: element.rect.y }
+  }, [modifiedElements])
 
-  // Flatten for rendering
+  // Handle element drag start
+  const handleElementMouseDown = (e: React.MouseEvent, elementId: string) => {
+    if (e.button !== 0) return
+    e.stopPropagation()
+    
+    const element = wireframeData?.elements.find(el => el.id === elementId)
+    if (!element) return
+
+    setSelectedWireframeId(elementId)
+    setIsDragging(true)
+    
+    const pos = getElementPosition(element)
+    setDragStart({ x: e.clientX, y: e.clientY })
+    setDragOffset({ x: pos.x, y: pos.y })
+  }
+
+  // Handle drag move
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging && selectedWireframeId) {
+      const dx = (e.clientX - dragStart.x) / zoom
+      const dy = (e.clientY - dragStart.y) / zoom
+      
+      setModifiedElements(prev => {
+        const next = new Map(prev)
+        next.set(selectedWireframeId, {
+          x: dragOffset.x + dx,
+          y: dragOffset.y + dy
+        })
+        return next
+      })
+    } else if (isPanning) {
+      setPan({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y
+      })
+    }
+  }
+
+  // Handle drag end
+  const handleMouseUp = () => {
+    setIsDragging(false)
+    setIsPanning(false)
+  }
+
+  // Flatten for rendering - render ALL elements, not just top-level
   const allElements = useMemo(() => {
     return wireframeData?.elements || []
   }, [wireframeData])
@@ -144,26 +179,38 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
     return allElements.find((el) => el.id === selectedWireframeId) || null
   }, [allElements, selectedWireframeId])
 
-  // Mouse handlers for panning
-  const handleMouseDown = (e: React.MouseEvent) => {
+  // Build hierarchical tree from flat elements
+  const hierarchicalElements = useMemo(() => {
+    if (!wireframeData) return []
+    
+    const rootElements: WireframeElement[] = []
+    
+    wireframeData.elements.forEach(el => {
+      if (!el.parentId) {
+        rootElements.push(el)
+      }
+    })
+    
+    // Sort by position (top to bottom, left to right)
+    rootElements.sort((a, b) => {
+      const posA = getElementPosition(a)
+      const posB = getElementPosition(b)
+      if (Math.abs(posA.y - posB.y) < 50) {
+        return posA.x - posB.x
+      }
+      return posA.y - posB.y
+    })
+    
+    return rootElements
+  }, [wireframeData, getElementPosition])
+
+  // Canvas mouse handlers for panning
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
     if (e.button === 1 || (e.button === 0 && e.shiftKey)) {
       setIsPanning(true)
       setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
       e.preventDefault()
     }
-  }
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning) {
-      setPan({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y
-      })
-    }
-  }
-
-  const handleMouseUp = () => {
-    setIsPanning(false)
   }
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -190,11 +237,35 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
         setSelectedWireframeId(null)
         deselectAll()
       }
+
+      // Arrow keys to nudge selected element
+      if (selectedWireframeId && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        e.preventDefault()
+        const step = e.shiftKey ? 10 : 1
+        const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+        const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+        
+        setModifiedElements(prev => {
+          const next = new Map(prev)
+          const current = next.get(selectedWireframeId)
+          const element = wireframeData?.elements.find(el => el.id === selectedWireframeId)
+          
+          if (element) {
+            const baseX = current?.x ?? element.rect.x
+            const baseY = current?.y ?? element.rect.y
+            next.set(selectedWireframeId, {
+              x: baseX + dx,
+              y: baseY + dy
+            })
+          }
+          return next
+        })
+      }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [deselectAll])
+  }, [selectedWireframeId, deselectAll, wireframeData])
 
   if (!previewUrl) {
     return (
@@ -240,10 +311,12 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
           ) : (
             <ElementTree
               elements={hierarchicalElements}
+              allElements={allElements}
               selectedId={selectedWireframeId}
               hoveredId={hoveredWireframeId}
               onSelect={selectElement}
               onHover={setHoveredWireframeId}
+              getElementPosition={getElementPosition}
             />
           )}
         </div>
@@ -319,7 +392,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
         <div
           ref={containerRef}
           className="h-full w-full cursor-grab active:cursor-grabbing"
-          onMouseDown={handleMouseDown}
+          onMouseDown={handleCanvasMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
@@ -378,19 +451,24 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                   }}
                 />
 
-                {/* Render elements */}
-                {filteredElements.map((element) => (
-                  <WireframeBox
-                    key={element.id}
-                    element={element}
-                    isSelected={selectedWireframeId === element.id}
-                    isHovered={hoveredWireframeId === element.id}
-                    showLabel={showLabels}
-                    showStructure={showStructure}
-                    onSelect={() => selectElement(element.id)}
-                    onHover={setHoveredWireframeId}
-                  />
-                ))}
+                {/* Render ALL elements (not filtered for hierarchy) */}
+                {filteredElements.map((element) => {
+                  const pos = getElementPosition(element)
+                  return (
+                    <WireframeBox
+                      key={element.id}
+                      element={element}
+                      position={pos}
+                      isSelected={selectedWireframeId === element.id}
+                      isHovered={hoveredWireframeId === element.id}
+                      showLabel={showLabels}
+                      showStructure={showStructure}
+                      onSelect={() => selectElement(element.id)}
+                      onHover={setHoveredWireframeId}
+                      onMouseDown={(e) => handleElementMouseDown(e, element.id)}
+                    />
+                  )
+                })}
               </div>
             </div>
           ) : null}
@@ -431,6 +509,9 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                 <div className="flex items-center gap-2">
                   <TagIcon tag={selectedElement.tag} />
                   <span className="font-mono text-sm font-medium">{selectedElement.tag}</span>
+                  {modifiedElements.has(selectedElement.id) && (
+                    <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] text-primary">Modified</span>
+                  )}
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">{getElementLabel(selectedElement)}</p>
               </div>
@@ -441,13 +522,14 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-md border bg-muted/30 p-2">
                     <span className="text-[10px] text-muted-foreground">X</span>
-                    <p className="font-mono text-sm">{Math.round(selectedElement.rect.x)}px</p>
+                    <p className="font-mono text-sm">{Math.round(getElementPosition(selectedElement).x)}px</p>
                   </div>
                   <div className="rounded-md border bg-muted/30 p-2">
                     <span className="text-[10px] text-muted-foreground">Y</span>
-                    <p className="font-mono text-sm">{Math.round(selectedElement.rect.y)}px</p>
+                    <p className="font-mono text-sm">{Math.round(getElementPosition(selectedElement).y)}px</p>
                   </div>
                 </div>
+                <p className="text-[10px] text-muted-foreground">Drag elements to move · Arrow keys to nudge</p>
               </div>
 
               {/* Size */}
@@ -499,7 +581,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-center">
-              <Layout className="mb-2 h-8 w-8 text-muted-foreground/50" />
+              <Target className="mb-2 h-8 w-8 text-muted-foreground/50" />
               <p className="text-xs text-muted-foreground">Select an element on the wireframe to view its properties</p>
               {wireframeData && (
                 <p className="mt-1 text-[10px] text-muted-foreground">
@@ -516,7 +598,7 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
             {wireframeData ? `${wireframeData.elements.length} elements · Page: ${wireframeData.title}` : 'No wireframe captured'}
           </p>
           <p className="text-[10px] text-muted-foreground">
-            Drag to pan · Scroll+Ctrl to zoom · Click to select
+            Drag to pan (Shift+drag) · Scroll+Ctrl to zoom · Click to select · Drag elements to move
           </p>
         </div>
       </div>
@@ -527,15 +609,17 @@ export function LayoutView({ currentPage }: LayoutViewProps) {
 // Wireframe box component
 interface WireframeBoxProps {
   element: WireframeElement
+  position: { x: number; y: number }
   isSelected: boolean
   isHovered: boolean
   showLabel: boolean
   showStructure: boolean
   onSelect: () => void
   onHover: (id: string | null) => void
+  onMouseDown: (e: React.MouseEvent) => void
 }
 
-function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure, onSelect, onHover }: WireframeBoxProps) {
+function WireframeBox({ element, position, isSelected, isHovered, showLabel, showStructure, onSelect, onHover, onMouseDown }: WireframeBoxProps) {
   const getBorderColor = () => {
     if (isSelected) return '#2563eb'
     if (isHovered) return '#3b82f6'
@@ -557,10 +641,10 @@ function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure
 
   return (
     <div
-      className="absolute cursor-pointer transition-colors"
+      className="absolute cursor-move transition-colors"
       style={{
-        left: element.rect.x,
-        top: element.rect.y,
+        left: position.x,
+        top: position.y,
         width: element.rect.width,
         height: element.rect.height,
         border: `${showStructure ? '1' : '0'}px solid ${getBorderColor()}`,
@@ -568,6 +652,7 @@ function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure
         zIndex: isSelected ? 100 : isHovered ? 50 : 10 - element.level
       }}
       onClick={handleClick}
+      onMouseDown={onMouseDown}
       onMouseEnter={() => onHover(element.id)}
       onMouseLeave={() => onHover(null)}
     >
@@ -600,25 +685,28 @@ function WireframeBox({ element, isSelected, isHovered, showLabel, showStructure
 // Element tree component
 interface ElementTreeProps {
   elements: WireframeElement[]
+  allElements: WireframeElement[]
   selectedId: string | null
   hoveredId: string | null
   onSelect: (id: string) => void
   onHover: (id: string | null) => void
+  getElementPosition: (element: WireframeElement) => { x: number; y: number }
 }
 
-function ElementTree({ elements, selectedId, hoveredId, onSelect, onHover }: ElementTreeProps) {
+function ElementTree({ elements, allElements, selectedId, hoveredId, onSelect, onHover, getElementPosition }: ElementTreeProps) {
   return (
     <div className="space-y-0.5">
       {elements.map((element) => (
         <TreeNode
           key={element.id}
           element={element}
+          allElements={allElements}
           selectedId={selectedId}
           hoveredId={hoveredId}
           onSelect={onSelect}
           onHover={onHover}
           depth={0}
-          allElements={elements}
+          getElementPosition={getElementPosition}
         />
       ))}
     </div>
@@ -627,15 +715,16 @@ function ElementTree({ elements, selectedId, hoveredId, onSelect, onHover }: Ele
 
 interface TreeNodeProps {
   element: WireframeElement
+  allElements: WireframeElement[]
   selectedId: string | null
   hoveredId: string | null
   onSelect: (id: string) => void
   onHover: (id: string | null) => void
   depth: number
-  allElements: WireframeElement[]
+  getElementPosition: (element: WireframeElement) => { x: number; y: number }
 }
 
-function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth, allElements }: TreeNodeProps) {
+function TreeNode({ element, allElements, selectedId, hoveredId, onSelect, onHover, depth, getElementPosition }: TreeNodeProps) {
   const [isExpanded, setIsExpanded] = useState(true)
   
   // Find children from all elements
@@ -646,6 +735,7 @@ function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth, al
   const hasChildren = childElements.length > 0
   const isSelected = selectedId === element.id
   const isHovered = hoveredId === element.id
+  const isModified = getElementPosition(element).x !== element.rect.x || getElementPosition(element).y !== element.rect.y
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -682,6 +772,9 @@ function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth, al
         )}
         <TagIcon tag={element.tag} className="h-3 w-3 shrink-0 opacity-70" />
         <span className="truncate">{getElementLabel(element)}</span>
+        {isModified && (
+          <Move className="ml-1 h-3 w-3 shrink-0 opacity-70" />
+        )}
       </div>
 
       {hasChildren && isExpanded && (
@@ -690,12 +783,13 @@ function TreeNode({ element, selectedId, hoveredId, onSelect, onHover, depth, al
             <TreeNode
               key={child.id}
               element={child}
+              allElements={allElements}
               selectedId={selectedId}
               hoveredId={hoveredId}
               onSelect={onSelect}
               onHover={onHover}
               depth={depth + 1}
-              allElements={allElements}
+              getElementPosition={getElementPosition}
             />
           ))}
         </div>
