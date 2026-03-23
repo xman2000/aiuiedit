@@ -644,30 +644,163 @@ function WireframeBox({ element, position, isSelected, isHovered, showLabel, sho
     onSelect()
   }
 
+  // Render content preview based on element type
+  const renderContent = () => {
+    const { tag, text, attributes, rect } = element
+    const isSmall = rect.height < 40 || rect.width < 60
+    
+    // Don't render content if element is too small
+    if (isSmall && !isSelected) return null
+
+    switch (tag) {
+      case 'img':
+      case 'image':
+        if (attributes.src) {
+          return (
+            <img
+              src={attributes.src}
+              alt={attributes.alt || ''}
+              className="w-full h-full object-cover pointer-events-none"
+              style={{ opacity: isSelected ? 0.8 : 0.6 }}
+              draggable={false}
+            />
+          )
+        }
+        return (
+          <div className="w-full h-full flex items-center justify-center bg-muted/30 pointer-events-none">
+            <ImageIcon className="w-6 h-6 text-muted-foreground/50" />
+          </div>
+        )
+
+      case 'h1':
+      case 'h2':
+      case 'h3':
+      case 'h4':
+      case 'h5':
+      case 'h6':
+      case 'heading':
+        if (text) {
+          return (
+            <div 
+              className="w-full h-full flex items-center px-2 overflow-hidden pointer-events-none"
+              style={{ 
+                fontSize: tag === 'h1' ? '24px' : tag === 'h2' ? '20px' : tag === 'h3' ? '18px' : '16px',
+                fontWeight: 700,
+                lineHeight: 1.2,
+                opacity: isSelected ? 0.9 : 0.7
+              }}
+            >
+              <span className="truncate">{text}</span>
+            </div>
+          )
+        }
+        break
+
+      case 'button':
+        if (text) {
+          return (
+            <div 
+              className="w-full h-full flex items-center justify-center px-3 overflow-hidden pointer-events-none"
+              style={{ 
+                backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.2)',
+                borderRadius: '6px',
+                fontSize: '14px',
+                fontWeight: 500,
+                color: '#1e40af'
+              }}
+            >
+              <span className="truncate">{text}</span>
+            </div>
+          )
+        }
+        break
+
+      case 'a':
+      case 'link':
+        if (text) {
+          return (
+            <div 
+              className="w-full h-full flex items-center px-2 overflow-hidden pointer-events-none"
+              style={{ 
+                fontSize: '14px',
+                color: '#2563eb',
+                textDecoration: 'underline',
+                opacity: isSelected ? 0.9 : 0.7
+              }}
+            >
+              <span className="truncate">{text}</span>
+            </div>
+          )
+        }
+        break
+
+      case 'p':
+      case 'span':
+      case 'text':
+      case 'li':
+        if (text) {
+          return (
+            <div 
+              className="w-full h-full px-2 py-1 overflow-hidden pointer-events-none"
+              style={{ 
+                fontSize: '14px',
+                lineHeight: 1.5,
+                opacity: isSelected ? 0.9 : 0.7
+              }}
+            >
+              <span className="line-clamp-3">{text}</span>
+            </div>
+          )
+        }
+        break
+
+      default:
+        // For structural elements, show text if available
+        if (text && !element.isStructural) {
+          return (
+            <div 
+              className="w-full h-full px-2 py-1 overflow-hidden pointer-events-none"
+              style={{ 
+                fontSize: '13px',
+                opacity: isSelected ? 0.8 : 0.6
+              }}
+            >
+              <span className="line-clamp-2">{text}</span>
+            </div>
+          )
+        }
+    }
+    return null
+  }
+
   return (
     <div
-      className="absolute cursor-move transition-colors"
+      className="absolute cursor-move transition-colors overflow-hidden"
       style={{
         left: position.x,
         top: position.y,
         width: element.rect.width,
         height: element.rect.height,
-        border: `${showStructure ? '1' : '0'}px solid ${getBorderColor()}`,
+        border: `${showStructure ? (isSelected ? '2' : '1') : '0'}px solid ${getBorderColor()}`,
         backgroundColor: getBackgroundColor(),
-        zIndex: isSelected ? 100 : isHovered ? 50 : element.level + 1
+        zIndex: isSelected ? 100 : isHovered ? 50 : element.level + 1,
+        boxShadow: isSelected ? '0 0 0 2px rgba(37, 99, 235, 0.3)' : 'none'
       }}
       onClick={handleClick}
       onMouseDown={onMouseDown}
       onMouseEnter={() => onHover(element.id)}
       onMouseLeave={() => onHover(null)}
     >
+      {/* Content preview */}
+      {renderContent()}
+
       {isSelected && (
         <div className="pointer-events-none absolute -inset-[2px] border-2 border-primary" />
       )}
 
-      {showLabel && (element.rect.height > 20 || isSelected || isHovered) && (
+      {showLabel && (element.rect.height > 30 || isSelected || isHovered) && (
         <div
-          className="absolute left-0 top-0 z-10 flex max-w-full items-center gap-1 truncate rounded-br bg-background/90 px-1.5 py-0.5 text-[10px] font-medium shadow-sm"
+          className="absolute left-0 top-0 z-20 flex max-w-full items-center gap-1 truncate rounded-br bg-background/95 px-1.5 py-0.5 text-[10px] font-medium shadow-sm"
           style={{ color: getBorderColor() }}
         >
           <TagIcon tag={element.tag} className="h-3 w-3" />
