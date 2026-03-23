@@ -52,15 +52,13 @@ function App() {
   }, [settings.theme])
 
   return (
-    <div className="h-screen w-screen overflow-hidden bg-background text-foreground">
-      <div className="h-full w-full p-1">
-        <div className="h-full w-full overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-          {isWelcomeOpen ? (
-            <WelcomeWizard />
-          ) : (
-            <MainLayout />
-          )}
-        </div>
+    <div className="h-screen w-screen overflow-hidden bg-background text-foreground p-1">
+      <div className="h-full w-full overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+        {isWelcomeOpen ? (
+          <WelcomeWizard />
+        ) : (
+          <MainLayout />
+        )}
       </div>
       <Toaster />
     </div>
