@@ -80,6 +80,20 @@ interface SourceRenderedElementEditPayload {
   }
 }
 
+interface SourceRenderedElementDeletePayload {
+  projectPath: string
+  pageId: string
+  tag: string
+  originalText: string
+  originalAttributes: {
+    href?: string
+    src?: string
+    alt?: string
+    className?: string
+    style?: string
+  }
+}
+
 interface ImportedNode {
   id: string
   type: string
@@ -1336,6 +1350,59 @@ function applyAttributeEditInSource(
   return { updated: sourceCode, applied: false }
 }
 
+function applyElementDeleteInSource(
+  sourceCode: string,
+  tag: string,
+  originalText: string,
+  originalAttributes: {
+    href?: string
+    src?: string
+    alt?: string
+    className?: string
+    style?: string
+  }
+): { updated: string; applied: boolean } {
+  const normalizedTag = tag.toLowerCase()
+  const attrHints = [
+    originalAttributes.href,
+    originalAttributes.src,
+    originalAttributes.alt,
+    originalAttributes.className,
+    originalAttributes.style
+  ].filter((value): value is string => !!value && value.trim().length > 0)
+
+  if (normalizedTag === 'img') {
+    const imgRegex = /<img\b([^>]*)\/?>/gi
+    let match: RegExpExecArray | null
+    while ((match = imgRegex.exec(sourceCode)) !== null) {
+      const attrs = match[1] || ''
+      const hasAttrMatch = attrHints.length === 0 || attrHints.some((value) => attrs.includes(value))
+      if (!hasAttrMatch) continue
+      const updated = sourceCode.slice(0, match.index) + sourceCode.slice(match.index + match[0].length)
+      return { updated, applied: true }
+    }
+    return { updated: sourceCode, applied: false }
+  }
+
+  const tagRegex = new RegExp(`<${escapeRegex(normalizedTag)}\\b([^>]*)>([\\s\\S]*?)<\\/${escapeRegex(normalizedTag)}>`,'gi')
+  let match: RegExpExecArray | null
+  while ((match = tagRegex.exec(sourceCode)) !== null) {
+    const attrs = match[1] || ''
+    const body = match[2] || ''
+
+    const hasTextMatch = !originalText.trim() || body.includes(originalText)
+    if (!hasTextMatch) continue
+
+    const hasAttrMatch = attrHints.length === 0 || attrHints.some((value) => attrs.includes(value))
+    if (!hasAttrMatch) continue
+
+    const updated = sourceCode.slice(0, match.index) + sourceCode.slice(match.index + match[0].length)
+    return { updated, applied: true }
+  }
+
+  return { updated: sourceCode, applied: false }
+}
+
 function normalizeRoute(route: string): string {
   const cleaned = route.trim().replace(/\s+/g, '-').replace(/\/+/g, '/').replace(/[^a-zA-Z0-9/_-]/g, '')
   if (!cleaned || cleaned === '/') return '/'
@@ -2187,6 +2254,43 @@ export function setupIPC() {
       success: true,
       sourceFile,
       changes
+    }
+  })
+
+  ipcMain.handle('source:apply-rendered-element-delete', async (_event, payload: SourceRenderedElementDeletePayload) => {
+    const { projectPath, pageId, tag, originalText, originalAttributes } = payload
+
+    const projectFile = join(projectPath, 'project.json')
+    const projectRaw = await fs.readFile(projectFile, 'utf-8')
+    const project = JSON.parse(projectRaw)
+
+    if (!project?.source?.roundTrip || !project?.source?.root) {
+      throw new Error('Project is not source-linked')
+    }
+
+    const sourceRoot = project.source.root as string
+    const sourcePages: Record<string, { file: string; route: string; framework?: SupportedFramework }> = project.source.pages || {}
+    const pageSource = sourcePages[pageId]
+    const sourceFile = pageSource?.file
+      ? join(sourceRoot, pageSource.file)
+      : join(sourceRoot, project.source.entryFile)
+
+    if (!(await pathExists(sourceFile))) {
+      throw new Error('Could not resolve source file for rendered delete')
+    }
+
+    const sourceCode = await fs.readFile(sourceFile, 'utf-8')
+    const patched = applyElementDeleteInSource(sourceCode, tag, originalText, originalAttributes)
+
+    if (!patched.applied) {
+      throw new Error('Could not locate selected rendered element in source file for deletion')
+    }
+
+    await fs.writeFile(sourceFile, patched.updated, 'utf-8')
+
+    return {
+      success: true,
+      sourceFile
     }
   })
 

@@ -37,6 +37,7 @@ const electronAPI = {
   syncSourcePage: (payload) => ipcRenderer.invoke('source:sync-page', payload),
   applyRenderedTextEdit: (payload) => ipcRenderer.invoke('source:apply-rendered-text-edit', payload),
   applyRenderedElementEdit: (payload) => ipcRenderer.invoke('source:apply-rendered-element-edit', payload),
+  applyRenderedElementDelete: (payload) => ipcRenderer.invoke('source:apply-rendered-element-delete', payload),
 
   // Preview
   capturePreviewRoute: (payload) => ipcRenderer.invoke('preview:capture-route', payload)

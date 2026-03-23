@@ -94,6 +94,19 @@ declare global {
           style?: string
         }
       }) => Promise<{ success: boolean; sourceFile: string; changes: string[] }>
+      applyRenderedElementDelete: (payload: {
+        projectPath: string
+        pageId: string
+        tag: string
+        originalText: string
+        originalAttributes: {
+          href?: string
+          src?: string
+          alt?: string
+          className?: string
+          style?: string
+        }
+      }) => Promise<{ success: boolean; sourceFile: string }>
       capturePreviewRoute: (payload: {
         url: string
       }) => Promise<{

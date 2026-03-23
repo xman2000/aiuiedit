@@ -635,6 +635,21 @@ function injectInstrumentedSnapshot(html: string, url: string): string {
         }
       }, '*');
     });
+
+    window.addEventListener('message', function(event){
+      var data = event.data || {};
+      if(data.type !== 'aiuiedit-delete-element') return;
+      var payload = data.payload || {};
+      var id = payload.id;
+      if(!id) return;
+      var el = document.querySelector('[data-aiuiedit-id="' + id + '"]');
+      if(!el || !el.parentElement) return;
+      el.parentElement.removeChild(el);
+      window.parent.postMessage({
+        type: 'aiuiedit-deleted',
+        payload: { id: id }
+      }, '*');
+    });
   })();</script>`
 
   if (/<head\b[^>]*>/i.test(sanitizedHtml)) {
@@ -758,6 +773,16 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
             style: data.payload.attributes?.style ?? prev.attributes.style
           }
         } : prev)
+      }
+
+      if (data.type === 'aiuiedit-deleted' && data.payload?.id && snapshotSelection?.id === data.payload.id) {
+        setSnapshotSelection(null)
+        setSnapshotEditText('')
+        setSnapshotHref('')
+        setSnapshotSrc('')
+        setSnapshotAlt('')
+        setSnapshotClassName('')
+        setSnapshotStyle('')
       }
     }
 
@@ -913,6 +938,41 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
       ? 'Updated snapshot element (visual edit only). Use Capture to Canvas to bring changes into design mode.'
       : 'Updated snapshot element attributes/classes (visual edit only).'
     )
+  }
+
+  const deleteSnapshotElementVisual = () => {
+    if (!snapshotSelection?.id || !snapshotIframeRef.current?.contentWindow) return
+    snapshotIframeRef.current.contentWindow.postMessage({
+      type: 'aiuiedit-delete-element',
+      payload: { id: snapshotSelection.id }
+    }, '*')
+    setStatusMessage('Deleted selected element in snapshot (visual only).')
+  }
+
+  const deleteSnapshotElementInSource = async () => {
+    if (!currentPage || !projectPath || !snapshotSelection?.id) {
+      window.showToast('No source-linked element selected', 'error')
+      return
+    }
+
+    try {
+      const result = await window.electron.applyRenderedElementDelete({
+        projectPath,
+        pageId: currentPage.id,
+        tag: snapshotSelection.tag,
+        originalText: snapshotSelection.text,
+        originalAttributes: snapshotSelection.attributes
+      })
+
+      deleteSnapshotElementVisual()
+      setSnapshotSelection(null)
+      setStatusMessage(`Deleted element from source -> ${result.sourceFile}`)
+      window.showToast('Rendered element deleted from source', 'success')
+      await loadSnapshot()
+    } catch (error) {
+      console.error('Source delete failed:', error)
+      window.showToast(`Source delete failed: ${error}`, 'error')
+    }
   }
 
   const postSnapshotAttributeUpdate = (nextAttributes: { className?: string; style?: string }) => {
@@ -1270,6 +1330,12 @@ export function RenderedPreview({ currentProject, currentPage, onCaptureBlocks }
                           <Button size="sm" variant="outline" className="w-full" onClick={applySnapshotTextEdit}>Apply in Snapshot</Button>
                           <Button size="sm" className="w-full" onClick={applySnapshotElementEditToSource} disabled={!currentProject?.source?.roundTrip}>
                             Apply to Source
+                          </Button>
+                          <Button size="sm" variant="outline" className="w-full" onClick={deleteSnapshotElementVisual}>
+                            Delete in Snapshot
+                          </Button>
+                          <Button size="sm" variant="destructive" className="w-full" onClick={deleteSnapshotElementInSource} disabled={!currentProject?.source?.roundTrip}>
+                            Delete from Source
                           </Button>
                           <p className="text-[11px] text-muted-foreground">Apply to Source writes atomic text/attribute patches to the mapped page file, then refreshes snapshot.</p>
                         </div>
